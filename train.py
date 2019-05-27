@@ -14,6 +14,7 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 import argparse
+from torchsummary import summary
 
 
 def str2bool(v):
@@ -90,10 +91,14 @@ def train():
 
     if args.visdom:
         import visdom
+        global viz
         viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
+
+    # summary
+    summary(net, input_size=(3, 300, 300))
 
     if args.cuda:
         net = torch.nn.DataParallel(ssd_net)
