@@ -21,6 +21,8 @@ def cv2_demo(net, transform):
     def predict(frame):
         height, width = frame.shape[:2]
         x = torch.from_numpy(transform(frame)[0]).permute(2, 0, 1)
+        if args.cuda:
+            x = x.cuda()
         x = Variable(x.unsqueeze(0))
         y = net(x)  # forward pass
         detections = y.data
@@ -73,6 +75,15 @@ if __name__ == '__main__':
 
     from data import BaseTransform, VOC_CLASSES as labelmap
     from ssd import build_ssd
+
+    if torch.cuda.is_available():
+        if args.cuda:
+            torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        if not args.cuda:
+            print("WARNING: It looks like you have a CUDA device, but aren't using \ CUDA. Run with --cuda for optimal eval speed.")
+            torch.set_default_tensor_type('torch.FloatTensor')
+    else:
+        torch.set_default_tensor_type('torch.FloatTensor')
 
     net = build_ssd('test', 300, 21)    # initialize SSD
     net.load_state_dict(torch.load(args.weights))
