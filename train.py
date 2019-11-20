@@ -50,7 +50,7 @@ parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
-parser.add_argument('--save_folder', default='weights/',
+parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
 args = parser.parse_args()
 
@@ -65,8 +65,8 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-if not os.path.exists(args.save_folder):
-    os.mkdir(args.save_folder)
+if not os.path.exists('weights/' + args.save_folder):
+    os.mkdir('weights/' + args.save_folder)
 
 
 def train():
@@ -129,7 +129,7 @@ def train():
         print('Resuming training, loading {}...'.format(args.resume))
         ssd_net.load_weights(args.resume)
     else:
-        vgg_weights = torch.load(args.save_folder + args.basenet)
+        vgg_weights = torch.load('weights/' + args.basenet)
         print('Loading base network...')
         ssd_net.vgg.load_state_dict(vgg_weights)
 
@@ -225,10 +225,10 @@ def train():
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), args.save_folder + 'ssd300_' +
+            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd300_' +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
-               args.save_folder + '' + args.dataset + '.pth')
+               'weights/' + args.save_folder + '' + args.dataset + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):
