@@ -24,7 +24,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO'],
+parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'CAR_CARPLATE', 'CAR', 'CARPLATE'],
                     type=str, help='VOC or COCO')
 parser.add_argument('--dataset_root', default=VOC_ROOT,
                     help='Dataset root directory path')
@@ -88,6 +88,27 @@ def train():
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
+
+    elif args.dataset == 'CAR_CARPLATE':
+        cfg = car_carplate
+        dataset = CAR_CARPLATEDetection(root=args.dataset_root,
+                                        transform=SSDAugmentation(cfg['min_dim'],
+                                                         MEANS),
+                                        dataset_name='trainval')
+
+    elif args.dataset == 'CAR':
+        cfg = car
+        dataset = CARDetection(root=args.dataset_root,
+                               transform=SSDAugmentation(cfg['min_dim'],
+                                                         MEANS),
+                               dataset_name='trainval')
+
+    elif args.dataset == 'CARPLATE':
+        cfg = carplate
+        dataset = CARPLATEDetection(root=args.dataset_root,
+                                    transform=SSDAugmentation(cfg['min_dim'],
+                                                         MEANS),
+                                    dataset_name='trainval')
 
     if args.visdom:
         import visdom
@@ -204,7 +225,7 @@ def train():
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
+            torch.save(ssd_net.state_dict(), args.save_folder + 'ssd300_' +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
                args.save_folder + '' + args.dataset + '.pth')
