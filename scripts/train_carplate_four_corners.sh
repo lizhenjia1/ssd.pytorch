@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python train_four_corners.py --dataset CARPLATE_FOUR_CORNERS --dataset_root /data/VALID/720p/carplate_four_corners/VOC/ --save_folder carplate_four_corners_weights/ --lr 1e-4 --visdom True --batch_size 32
+CUDA_VISIBLE_DEVICES=0,1,2,3 python train_four_corners.py --dataset CARPLATE_FOUR_CORNERS --dataset_root /data/VALID/720p/carplate_four_corners/VOC/ --save_folder carplate_four_corners_weights/ --lr 1e-4 --visdom True --batch_size 64

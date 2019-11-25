@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from data import voc as cfg
 from ..box_utils import match, match_offset, match_four_corners, log_sum_exp
+from ..box_utils import decode, decode_four_corners
 
 
 class MultiBoxLoss(nn.Module):
