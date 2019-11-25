@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import voc, coco, car, carplate, car_carplate
+from data import car_branch, carplate_branch
 import os
 
 
@@ -25,13 +25,16 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, phase, size, base, extras, head, num_classes):
+    def __init__(self, phase, size, base, extras, car_head, carplate_head, num_classes):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.cfg = (coco, voc)[num_classes == 21]
-        self.priorbox = PriorBox(self.cfg)
-        self.priors = Variable(self.priorbox.forward(), volatile=True)
+        self.car_cfg = car_branch
+        self.carplate_cfg = carplate_branch
+        self.car_priorbox = PriorBox(self.car_cfg)
+        self.carplate_priorbox = PriorBox(self.carplate_cfg)
+        self.car_priors = Variable(self.car_priorbox.forward(), volatile=True)
+        self.carplate_priors = Variable(self.carplate_priorbox.forward(), volatile=True)
         self.size = size
 
         # SSD network
@@ -40,8 +43,11 @@ class SSD(nn.Module):
         self.L2Norm = L2Norm(512, 20)
         self.extras = nn.ModuleList(extras)
 
-        self.loc = nn.ModuleList(head[0])
-        self.conf = nn.ModuleList(head[1])
+        self.car_loc = nn.ModuleList(car_head[0])
+        self.car_conf = nn.ModuleList(car_head[1])
+
+        self.carplate_loc = nn.ModuleList(carplate_head[0])
+        self.carplate_conf = nn.ModuleList(carplate_head[1])
 
         if phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
@@ -66,47 +72,71 @@ class SSD(nn.Module):
                     2: localization layers, Shape: [batch,num_priors*4]
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
-        sources = list()
-        loc = list()
-        conf = list()
+        car_sources = list()
+        car_loc = list()
+        car_conf = list()
+
+        carplate_sources = list()
+        carplate_loc = list()
+        carplate_conf = list()
 
         # apply vgg up to conv4_3 relu
         for k in range(23):
             x = self.vgg[k](x)
 
         s = self.L2Norm(x)
-        sources.append(s)
+        car_sources.append(s)
+        carplate_sources.append(s)
 
         # apply vgg up to fc7
         for k in range(23, len(self.vgg)):
             x = self.vgg[k](x)
-        sources.append(x)
+
+        car_sources.append(x)
+        carplate_sources.append(x)
 
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k % 2 == 1:
-                sources.append(x)
+                car_sources.append(x)
 
         # apply multibox head to source layers
-        for (x, l, c) in zip(sources, self.loc, self.conf):
-            loc.append(l(x).permute(0, 2, 3, 1).contiguous())
-            conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+        for (x, l, c) in zip(car_sources, self.car_loc, self.car_conf):
+            car_loc.append(l(x).permute(0, 2, 3, 1).contiguous())
+            car_conf.append(c(x).permute(0, 2, 3, 1).contiguous())
 
-        loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
-        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+        # apply multibox head to source layers
+        for (x, l, c) in zip(carplate_sources, self.carplate_loc, self.carplate_conf):
+            carplate_loc.append(l(x).permute(0, 2, 3, 1).contiguous())
+            carplate_conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+
+        car_loc = torch.cat([o.view(o.size(0), -1) for o in car_loc], 1)
+        car_conf = torch.cat([o.view(o.size(0), -1) for o in car_conf], 1)
+
+        carplate_loc = torch.cat([o.view(o.size(0), -1) for o in carplate_loc], 1)
+        carplate_conf = torch.cat([o.view(o.size(0), -1) for o in carplate_conf], 1)
+
         if self.phase == "test":
             output = self.detect(
-                loc.view(loc.size(0), -1, 4),                   # loc preds
-                self.softmax(conf.view(conf.size(0), -1,
+                car_loc.view(car_loc.size(0), -1, 4),           # loc preds
+                self.softmax(car_conf.view(car_conf.size(0), -1,
                              self.num_classes)),                # conf preds
-                self.priors.type(type(x.data))                  # default boxes
+                self.car_priors.type(type(x.data)),             # default boxes
+                
+                carplate_loc.view(carplate_loc.size(0), -1, 4), # loc preds
+                self.softmax(carplate_conf.view(carplate_conf.size(0), -1,
+                                           self.num_classes)),  # conf preds
+                self.carplate_priors.type(type(x.data))         # default boxes
             )
         else:
             output = (
-                loc.view(loc.size(0), -1, 4),
-                conf.view(conf.size(0), -1, self.num_classes),
-                self.priors
+                car_loc.view(car_loc.size(0), -1, 4),
+                car_conf.view(car_conf.size(0), -1, self.num_classes),
+                self.car_priors,
+                carplate_loc.view(carplate_loc.size(0), -1, 4),
+                carplate_conf.view(carplate_conf.size(0), -1, self.num_classes),
+                self.carplate_priors
             )
         return output
 
@@ -164,20 +194,29 @@ def add_extras(cfg, i, batch_norm=False):
 
 
 def multibox(vgg, extra_layers, cfg, num_classes):
-    loc_layers = []
-    conf_layers = []
-    vgg_source = [21, -2]
-    for k, v in enumerate(vgg_source):
-        loc_layers += [nn.Conv2d(vgg[v].out_channels,
+    car_loc_layers = []
+    car_conf_layers = []
+    carplate_loc_layers = []
+    carplate_conf_layers = []
+    car_vgg_source = [21, -2]
+    carplate_vgg_source = [21, -2]
+    for k, v in enumerate(car_vgg_source):
+        car_loc_layers += [nn.Conv2d(vgg[v].out_channels,
                                  cfg[k] * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(vgg[v].out_channels,
+        car_conf_layers += [nn.Conv2d(vgg[v].out_channels,
+                        cfg[k] * num_classes, kernel_size=3, padding=1)]
+    for k, v in enumerate(carplate_vgg_source):
+        carplate_loc_layers += [nn.Conv2d(vgg[v].out_channels,
+                                 cfg[k] * 4, kernel_size=3, padding=1)]
+        carplate_conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
-        loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
+        car_loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
+        car_conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
-    return vgg, extra_layers, (loc_layers, conf_layers)
+    
+    return vgg, extra_layers, (car_loc_layers, car_conf_layers), (carplate_loc_layers, carplate_conf_layers)
 
 
 base = {
@@ -203,7 +242,7 @@ def build_ssd(phase, size=300, num_classes=21):
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 (size=300) is supported!")
         return
-    base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
+    base_, extras_, car_head_, carplate_head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], 1024),
                                      mbox[str(size)], num_classes)
-    return SSD(phase, size, base_, extras_, head_, num_classes)
+    return SSD(phase, size, base_, extras_, car_head_, carplate_head_, num_classes)
