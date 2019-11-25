@@ -10,8 +10,8 @@ def point_form(boxes):
     Return:
         boxes: (tensor) Converted xmin, ymin, xmax, ymax form of boxes.
     """
-    return torch.cat((boxes[:, :2] - boxes[:, 2:]/2,     # xmin, ymin
-                     boxes[:, :2] + boxes[:, 2:]/2), 1)  # xmax, ymax
+    return torch.cat((boxes[:, :2] - boxes[:, 2:4]/2,     # xmin, ymin
+                     boxes[:, :2] + boxes[:, 2:4]/2), 1)  # xmax, ymax
 
 
 def center_size(boxes):
@@ -22,8 +22,8 @@ def center_size(boxes):
     Return:
         boxes: (tensor) Converted xmin, ymin, xmax, ymax form of boxes.
     """
-    return torch.cat((boxes[:, 2:] + boxes[:, :2])/2,  # cx, cy
-                     boxes[:, 2:] - boxes[:, :2], 1)  # w, h
+    return torch.cat((boxes[:, 2:4] + boxes[:, :2])/2,  # cx, cy
+                     boxes[:, 2:4] - boxes[:, :2], 1)  # w, h
 
 
 def intersect(box_a, box_b):
@@ -39,8 +39,8 @@ def intersect(box_a, box_b):
     """
     A = box_a.size(0)
     B = box_b.size(0)
-    max_xy = torch.min(box_a[:, 2:].unsqueeze(1).expand(A, B, 2),
-                       box_b[:, 2:].unsqueeze(0).expand(A, B, 2))
+    max_xy = torch.min(box_a[:, 2:4].unsqueeze(1).expand(A, B, 2),
+                       box_b[:, 2:4].unsqueeze(0).expand(A, B, 2))
     min_xy = torch.max(box_a[:, :2].unsqueeze(1).expand(A, B, 2),
                        box_b[:, :2].unsqueeze(0).expand(A, B, 2))
     inter = torch.clamp((max_xy - min_xy), min=0)
@@ -89,12 +89,15 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     overlaps = jaccard(
         truths,
         point_form(priors)
-    )
+    )  # (num_gt,num_priors)
+
     # (Bipartite Matching)
-    # [1,num_objects] best prior for each ground truth
+    # [num_objects,1] best prior for each ground truth
     best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
     best_prior_idx.squeeze_(1)
@@ -105,11 +108,174 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
     matches = truths[best_truth_idx]          # Shape: [num_priors,4]
-    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
+    conf = labels[best_truth_idx] + 1         # Shape: [num_priors] 因为背景当做一类，所以需要+1
     conf[best_truth_overlap < threshold] = 0  # label as background
+
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
+
+
+def match_offset(threshold, truths, priors, variances, labels, loc_t, conf_t, has_lp_t, size_lp_t, offset_t, idx):
+    """Match each prior box with the ground truth box of the highest jaccard
+    overlap, encode the bounding boxes, then return the matched indices
+    corresponding to both confidence and location preds.
+    Args:
+        threshold: (float) The overlap threshold used when mathing boxes.
+        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
+        priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
+        variances: (tensor) Variances corresponding to each prior coord,
+            Shape: [num_priors, 4].
+        labels: (tensor) All the class labels for the image, Shape: [num_obj].
+        loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
+        conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
+        idx: (int) current batch index
+    Return:
+        The matched indices corresponding to 1)location and 2)confidence preds.
+    """
+    # jaccard index
+    overlaps = jaccard(
+        truths,
+        point_form(priors)
+    )  # (num_gt,num_priors)
+
+    # (Bipartite Matching)
+    # [num_objects,1] best prior for each ground truth
+    # 内容是0 - 8731
+    best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+
+    # [1,num_priors] best ground truth for each prior
+    # 内容是0 - (num_objects - 1)
+    best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+
+    best_truth_idx.squeeze_(0)
+    best_truth_overlap.squeeze_(0)
+    best_prior_idx.squeeze_(1)
+    best_prior_overlap.squeeze_(1)
+    best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
+    # TODO refactor: index  best_prior_idx with long tensor
+    # ensure every gt matches with its prior of max overlap
+    for j in range(best_prior_idx.size(0)):
+        best_truth_idx[best_prior_idx[j]] = j  # best_truth_idx contains best_prior_idx
+    matches = truths[best_truth_idx]          # Shape: [num_priors,4]
+    conf = labels[best_truth_idx] + 1         # Shape: [num_priors] 因为背景当做一类，所以需要+1
+    conf[best_truth_overlap < threshold] = 0  # label as background
+
+    loc = encode(matches, priors, variances)
+    loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
+    conf_t[idx] = conf  # [num_priors] top class label for each prior
+
+    has_lp_t[idx] = matches[:, 4]
+    size_lp = encode_offset(matches[:, 5:7], priors, variances)
+    offset = encode_offset(matches[:, 7:9], priors, variances)
+    size_lp_t[idx] = size_lp
+    offset_t[idx] = offset
+
+
+def match_four_corners(threshold, truths, priors, variances, labels, loc_t, conf_t, four_corners_t, idx):
+    """Match each prior box with the ground truth box of the highest jaccard
+    overlap, encode the bounding boxes, then return the matched indices
+    corresponding to both confidence and location preds.
+    Args:
+        threshold: (float) The overlap threshold used when mathing boxes.
+        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
+        priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
+        variances: (tensor) Variances corresponding to each prior coord,
+            Shape: [num_priors, 4].
+        labels: (tensor) All the class labels for the image, Shape: [num_obj].
+        loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
+        conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
+        idx: (int) current batch index
+    Return:
+        The matched indices corresponding to 1)location and 2)confidence preds.
+    """
+    # jaccard index
+    overlaps = jaccard(
+        truths,
+        point_form(priors)
+    )  # (num_gt,num_priors)
+
+    # (Bipartite Matching)
+    # [num_objects,1] best prior for each ground truth
+    # 内容是0 - 8731
+    best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+
+    # [1,num_priors] best ground truth for each prior
+    # 内容是0 - (num_objects - 1)
+    best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+
+    best_truth_idx.squeeze_(0)
+    best_truth_overlap.squeeze_(0)
+    best_prior_idx.squeeze_(1)
+    best_prior_overlap.squeeze_(1)
+    best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
+    # TODO refactor: index  best_prior_idx with long tensor
+    # ensure every gt matches with its prior of max overlap
+    for j in range(best_prior_idx.size(0)):
+        best_truth_idx[best_prior_idx[j]] = j  # best_truth_idx contains best_prior_idx
+    matches = truths[best_truth_idx]          # Shape: [num_priors,4]
+    conf = labels[best_truth_idx] + 1         # Shape: [num_priors] 因为背景当做一类，所以需要+1
+    conf[best_truth_overlap < threshold] = 0  # label as background
+
+    loc = encode(matches, priors, variances)
+    loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
+    conf_t[idx] = conf  # [num_priors] top class label for each prior
+
+    four_corners = encode_four_corners(matches[:, 4:12], priors, variances)
+    four_corners_t[idx] = four_corners
+
+
+def match_two_stage_end2end(truths, priors, rois_t, idx):
+    # jaccard index
+    overlaps = jaccard(
+        truths,
+        priors
+    )  # (num_gt,num_priors)
+
+    # (Bipartite Matching)
+    # [num_objects,1] best prior for each ground truth
+    best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+    gt_num = best_prior_overlap.shape[0]
+
+    best_prior_idx.squeeze_(1)
+    best_prior_overlap.squeeze_(1)
+    matches = priors[best_prior_idx]          # Shape: [num_priors,4]
+
+    rois_t[idx, :gt_num, 0] = best_prior_overlap
+    rois_t[idx, :gt_num, 1:-1] = matches
+    rois_t[idx, :gt_num, -1] = 1
+
+
+def match_two_stage_end2end_offset(truths, priors, rois_t, expand_num):
+    # jaccard index
+    overlaps = jaccard(
+        truths[:, :4],
+        priors[:, 1:5]
+    )  # (num_gt,num_priors)
+
+    # (Bipartite Matching)
+    # [num_objects,1] best prior for each ground truth
+    best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+    gt_num = best_prior_overlap.shape[0]
+
+    best_prior_idx.squeeze_(1)
+    # best_prior_overlap.squeeze_(1)
+    matches = priors[best_prior_idx]          # Shape: [num_priors,4]
+
+    # 针对matches中offset,size以及扩大倍数在车内扩大
+    car_center = (matches[:, [1, 2]] + matches[:, [3, 4]]) / 2
+    lp_center = car_center + matches[:, [8, 9]]
+    lp_bbox_top_left = lp_center - matches[:, [6, 7]] / 2 * expand_num
+    lp_bbox_bottom_right = lp_center + matches[:, [6, 7]] / 2 * expand_num
+    lp_bbox = torch.cat((lp_bbox_top_left, lp_bbox_bottom_right), 1)
+    # 将扩大后的车牌区域限制在图片内
+    lp_bbox = torch.max(lp_bbox, torch.zeros(lp_bbox.shape))
+    lp_bbox = torch.min(lp_bbox, torch.ones(lp_bbox.shape))
+    # 将扩大后的车牌区域限制在检测到的车内
+    lp_bbox = torch.max(lp_bbox, matches[:, 1:3].repeat(1, 2))
+    lp_bbox = torch.min(lp_bbox, matches[:, 3:5].repeat(1, 2))
+
+    rois_t.append(torch.cat((best_prior_overlap, lp_bbox.reshape(-1, 4), torch.ones(gt_num, 1)), 1))
 
 
 def encode(matched, priors, variances):
@@ -126,14 +292,59 @@ def encode(matched, priors, variances):
     """
 
     # dist b/t match center and prior's center
-    g_cxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
+    g_cxcy = (matched[:, :2] + matched[:, 2:4])/2 - priors[:, :2]
     # encode variance
     g_cxcy /= (variances[0] * priors[:, 2:])
     # match wh / prior wh
-    g_wh = (matched[:, 2:] - matched[:, :2]) / priors[:, 2:]
+    g_wh = (matched[:, 2:4] - matched[:, :2]) / priors[:, 2:]
     g_wh = torch.log(g_wh) / variances[1]
+
     # return target for smooth_l1_loss
-    return torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
+    return torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4], 按列拼接
+
+
+def encode_offset(matched, priors, variances):
+    """Encode the variances from the priorbox layers into the ground truth boxes
+    we have matched (based on jaccard overlap) with the prior boxes.
+    Args:
+        matched: (tensor) Coords of ground truth for each prior in point-form
+            Shape: [num_priors, 2].
+        priors: (tensor) Prior boxes in center-offset form
+            Shape: [num_priors,4].
+        variances: (list[float]) Variances of priorboxes
+    Return:
+        encoded boxes (tensor), Shape: [num_priors, 2]
+    """
+
+    # encode variance
+    res = matched[:, :2] / (variances[0] * priors[:, 2:] * variances[1])
+    # return target for smooth_l1_loss
+    return res  # [num_priors,2]
+
+
+def encode_four_corners(matched, priors, variances):
+    """Encode the variances from the priorbox layers into the ground truth boxes
+    we have matched (based on jaccard overlap) with the prior boxes.
+    Args:
+        matched: (tensor) Coords of ground truth for each prior in point-form
+            Shape: [num_priors, 4].
+        priors: (tensor) Prior boxes in center-offset form
+            Shape: [num_priors,4].
+        variances: (list[float]) Variances of priorboxes
+    Return:
+        encoded boxes (tensor), Shape: [num_priors, 4]
+    """
+
+    priors_center = priors[:, :2].repeat(1, 4)
+    priors_size = priors[:, 2:].repeat(1, 4)
+
+    # dist b/t match corner and prior's center
+    g_corners = matched - priors_center
+    # encode variance
+    g_corners /= (variances[0] * priors_size)
+
+    # return target for smooth_l1_loss
+    return g_corners  # [num_priors,8], 按列拼接
 
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd
@@ -156,6 +367,45 @@ def decode(loc, priors, variances):
     boxes[:, :2] -= boxes[:, 2:] / 2
     boxes[:, 2:] += boxes[:, :2]
     return boxes
+
+
+# Adapted from https://github.com/Hakuyume/chainer-ssd
+def decode_offset(output, priors, variances):
+    """Decode locations from predictions using priors to undo
+    the encoding we did for offset regression at train time.
+    Args:
+        loc (tensor): location predictions for loc layers,
+            Shape: [num_priors,4]
+        priors (tensor): Prior boxes in center-offset form.
+            Shape: [num_priors,4].
+        variances: (list[float]) Variances of priorboxes
+    Return:
+        decoded bounding box predictions
+    """
+
+    res = output * variances[0] * priors[:, 2:] * variances[1]
+    return res
+
+
+# Adapted from https://github.com/Hakuyume/chainer-ssd
+def decode_four_corners(corners, priors, variances):
+    """Decode locations from predictions using priors to undo
+    the encoding we did for offset regression at train time.
+    Args:
+        loc (tensor): location predictions for loc layers,
+            Shape: [num_priors,4]
+        priors (tensor): Prior boxes in center-offset form.
+            Shape: [num_priors,4].
+        variances: (list[float]) Variances of priorboxes
+    Return:
+        decoded bounding box predictions
+    """
+    priors_center = priors[:, :2].repeat(1, 4)
+    priors_size = priors[:, 2:].repeat(1, 4)
+
+    res = priors_center + corners * variances[0] * priors_size
+
+    return res
 
 
 def log_sum_exp(x):

@@ -2,6 +2,7 @@ from .voc0712 import VOCDetection, VOCAnnotationTransform, VOC_CLASSES, VOC_ROOT
 from .car_carplate import CAR_CARPLATEDetection, CAR_CARPLATEAnnotationTransform, CAR_CARPLATE_CLASSES, CAR_CARPLATE_ROOT
 from .car import CARDetection, CARAnnotationTransform, CAR_CLASSES, CAR_ROOT
 from .carplate import CARPLATEDetection, CARPLATEAnnotationTransform, CARPLATE_CLASSES, CARPLATE_ROOT
+from .car_carplate_offset import CAR_CARPLATE_OFFSETDetection, CAR_CARPLATE_OFFSETAnnotationTransform, CAR_CARPLATE_OFFSET_CLASSES, CAR_CARPLATE_OFFSET_ROOT
 from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, COCO_ROOT, get_label_map
 from .config import *
 import torch

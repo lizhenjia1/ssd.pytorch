@@ -115,3 +115,55 @@ carplate_branch = {
     'clip': True,
     'name': 'CARPLATE_BRANCH',
 }
+
+car_carplate_offset = {
+    'num_classes': 2,
+    'lr_steps': (80000, 100000, 120000),
+    'max_iter': 120000,
+    'feature_maps': [38, 19, 10, 5, 3, 1],
+    'min_dim': 300,
+    'steps': [8, 16, 32, 64, 100, 300],
+    'min_sizes': [30, 60, 111, 162, 213, 264],
+    'max_sizes': [60, 111, 162, 213, 264, 315],
+    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    'variance': [0.1, 0.2],
+    'clip': True,
+    'name': 'CAR_CARPLATE_OFFSET',
+}
+
+carplate_four_corners = {
+    'num_classes': 2,
+    'lr_steps': (80000, 100000, 120000),
+    'max_iter': 120000,
+    'feature_maps': [38, 19, 10, 5, 3, 1],
+    'min_dim': 300,
+    'steps': [8, 16, 32, 64, 100, 300],
+    'min_sizes': [30, 60, 111, 162, 213, 264],
+    'max_sizes': [60, 111, 162, 213, 264, 315],
+    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    'variance': [0.1, 0.2],
+    'clip': True,
+    'name': 'CARPLATE_FOUR_CORNERS',
+}
+
+two_stage_end2end = {
+    'num_classes': 2,
+    'lr_steps': (80000, 100000, 120000),
+    'max_iter': 120000,
+    'feature_maps': [38, 19, 10, 5, 3, 1],
+    'feature_maps_2': [28, 28, 28],
+    'min_dim': 300,
+    'min_dim_2': 28,
+    'expand_num': 3,
+    'steps': [8, 16, 32, 64, 100, 300],
+    'steps_2': [1, 1, 1],
+    'min_sizes': [30, 60, 111, 162, 213, 264],
+    'max_sizes': [60, 111, 162, 213, 264, 315],
+    'min_sizes_2': [5.0, 10.0, 45.0],
+    'max_sizes_2': [10.0, 45.0, 80.0],
+    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    'aspect_ratios_2': [[2], [2, 3], [2, 3]],
+    'variance': [0.1, 0.2],
+    'clip': True,
+    'name': 'TWO_STAGE_END2END',
+}
