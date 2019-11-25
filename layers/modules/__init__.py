@@ -1,4 +1,4 @@
 from .l2norm import L2Norm
-from .multibox_loss import MultiBoxLoss, MultiBoxLoss_offset
+from .multibox_loss import MultiBoxLoss, MultiBoxLoss_offset, MultiBoxLoss_four_corners, MultiBoxLoss_four_corners_with_border
 
-__all__ = ['L2Norm', 'MultiBoxLoss', 'MultiBoxLoss_offset']
+__all__ = ['L2Norm', 'MultiBoxLoss', 'MultiBoxLoss_offset', 'MultiBoxLoss_four_corners', 'MultiBoxLoss_four_corners_with_border']
