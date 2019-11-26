@@ -143,10 +143,10 @@ def train():
     #                        weight_decay=args.weight_decay)
     criterion = MultiBoxLoss_offset(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
-    # criterion_2 = MultiBoxLoss_four_corners(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-    #                          False, args.cuda)
-    criterion_2 = MultiBoxLoss_four_corners_with_border(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                                          False, args.cuda)
+    criterion_2 = MultiBoxLoss_four_corners(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
+                             False, args.cuda)
+    # criterion_2 = MultiBoxLoss_four_corners_with_border(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
+    #                                       False, args.cuda)
 
     net.train()
     # loss counters
