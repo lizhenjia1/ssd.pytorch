@@ -11,7 +11,7 @@ sys.path.append(".")
 from ssd_two_stage_end2end import build_ssd
 
 net = build_ssd('test', 300, 28, 2, 3)    # initialize SSD
-net.load_weights('weights/two_stage_end2end_weights/ssd300_30000.pth')
+net.load_weights('weights/two_stage_end2end_weights/ssd300_35000.pth')
 
 # matplotlib inline
 from matplotlib import pyplot as plt
