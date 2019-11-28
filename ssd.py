@@ -203,7 +203,7 @@ def build_ssd(phase, size=300, num_classes=21):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300 and size !=512:
+    if size != 300 and size != 512:
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 SSD512 (size=300 or size=512) is supported!")
         return
