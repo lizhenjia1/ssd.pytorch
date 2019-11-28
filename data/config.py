@@ -10,18 +10,14 @@ COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
 
 MEANS = (104, 117, 123)
 
-# SSD300 CONFIGS
-
-
-def change_cfg_for_ssd500(cfg):
-    cfg['min_dim']=512
-    cfg['steps']=[8, 16, 32, 64, 86, 128,512]
-    cfg['feature_maps']=[64, 32, 16, 8, 6, 4,1]
-    cfg['min_sizes']= [51.2, 102.4, 174.08, 245.76, 317.44, 389.12, 460.8]
-    cfg['max_sizes']=[102.4, 174.08, 245.76, 317.44, 389.12, 460.8, 532.48]
-    cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2],[2]]
+def change_cfg_for_ssd512(cfg):
+    cfg['min_dim'] = 512
+    cfg['steps'] = [8, 16, 32, 64, 86, 128, 512]
+    cfg['feature_maps'] = [64, 32, 16, 8, 6, 4, 1]
+    cfg['min_sizes'] = [51.2, 102.4, 174.08, 245.76, 317.44, 389.12, 460.8]
+    cfg['max_sizes'] = [102.4, 174.08, 245.76, 317.44, 389.12, 460.8, 532.48]
+    cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2], [2]]
     return cfg
-
 
 voc = {
     'num_classes': 21,
@@ -179,4 +175,3 @@ two_stage_end2end = {
     'clip': True,
     'name': 'TWO_STAGE_END2END',
 }
-

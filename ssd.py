@@ -157,7 +157,7 @@ def add_extras(cfg, i, batch_norm=False):
                 layers += [nn.Conv2d(in_channels, cfg[k + 1],
                            kernel_size=(1, 3)[flag], stride=2, padding=1)]
             else:
-                if k==11:
+                if k == 11:
                     layers += [nn.Conv2d(in_channels, v, kernel_size=4)]
                 else:
                     layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
