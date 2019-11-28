@@ -26,11 +26,11 @@ parser = argparse.ArgumentParser(
 train_set = parser.add_mutually_exclusive_group()
 parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'CAR_CARPLATE', 'CAR', 'CARPLATE'],
                     type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default="/data3/car_data/1/VOC/VOCdevkit",
+parser.add_argument('--dataset_root', default=VOC_ROOT,
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
-parser.add_argument('--batch_size', default=4, type=int,
+parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from')
@@ -87,12 +87,7 @@ def train():
             parser.error('Must specify dataset if specifying dataset_root')
         cfg = voc
         if args.network_size==512:
-            cfg['min_dim']=512
-            cfg['steps']=[8, 16, 32, 64, 86, 128,512]
-            cfg['feature_maps']=[64, 32, 16, 8, 6, 4,1]
-            cfg['min_sizes']= [51.2, 102.4, 174.08, 245.76, 317.44, 389.12, 460.8]
-            cfg['max_sizes']=[102.4, 174.08, 245.76, 317.44, 389.12, 460.8, 532.48]
-            cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2],[2]]
+            cfg=change_cfg_for_ssd500(cfg)
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
@@ -100,12 +95,7 @@ def train():
     elif args.dataset == 'CAR_CARPLATE':
         cfg = car_carplate
         if args.network_size==512:
-            cfg['min_dim']=512
-            cfg['steps']=[8, 16, 32, 64, 86, 128,512]
-            cfg['feature_maps']=[64, 32, 16, 8, 6, 4,1]
-            cfg['min_sizes']= [51.2, 102.4, 174.08, 245.76, 317.44, 389.12, 460.8]
-            cfg['max_sizes']=[102.4, 174.08, 245.76, 317.44, 389.12, 460.8, 532.48]
-            cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2],[2]]
+            cfg=change_cfg_for_ssd500(cfg)
         dataset = CAR_CARPLATEDetection(root=args.dataset_root,
                                         transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
@@ -114,12 +104,7 @@ def train():
     elif args.dataset == 'CAR':
         cfg = car
         if args.network_size==512:
-            cfg['min_dim']=512
-            cfg['steps']=[8, 16, 32, 64, 86, 128,512]
-            cfg['feature_maps']=[64, 32, 16, 8, 6, 4,1]
-            cfg['min_sizes']= [51.2, 102.4, 174.08, 245.76, 317.44, 389.12, 460.8]
-            cfg['max_sizes']=[102.4, 174.08, 245.76, 317.44, 389.12, 460.8, 532.48]
-            cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2],[2]]
+            cfg=change_cfg_for_ssd500(cfg)
         dataset = CARDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
@@ -128,12 +113,7 @@ def train():
     elif args.dataset == 'CARPLATE':
         cfg = carplate
         if args.network_size==512:
-            cfg['min_dim']=512
-            cfg['steps']=[8, 16, 32, 64, 86, 128,512]
-            cfg['feature_maps']=[64, 32, 16, 8, 6, 4,1]
-            cfg['min_sizes']= [51.2, 102.4, 174.08, 245.76, 317.44, 389.12, 460.8]
-            cfg['max_sizes']=[102.4, 174.08, 245.76, 317.44, 389.12, 460.8, 532.48]
-            cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2],[2]]
+            cfg=change_cfg_for_ssd500(cfg)
         dataset = CARPLATEDetection(root=args.dataset_root,
                                     transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
