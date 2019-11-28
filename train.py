@@ -52,7 +52,7 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--network_size', default=512, type=int,help='SSD300 or SSD512')
+parser.add_argument('--network_size', default=300, type=int, help='SSD300 or SSD512')
 args = parser.parse_args()
 
 
@@ -86,16 +86,16 @@ def train():
         if args.dataset_root == COCO_ROOT:
             parser.error('Must specify dataset if specifying dataset_root')
         cfg = voc
-        if args.network_size==512:
-            cfg=change_cfg_for_ssd500(cfg)
+        if args.network_size == 512:
+            cfg = change_cfg_for_ssd512(cfg)
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
 
     elif args.dataset == 'CAR_CARPLATE':
         cfg = car_carplate
-        if args.network_size==512:
-            cfg=change_cfg_for_ssd500(cfg)
+        if args.network_size == 512:
+            cfg = change_cfg_for_ssd512(cfg)
         dataset = CAR_CARPLATEDetection(root=args.dataset_root,
                                         transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
@@ -103,8 +103,8 @@ def train():
 
     elif args.dataset == 'CAR':
         cfg = car
-        if args.network_size==512:
-            cfg=change_cfg_for_ssd500(cfg)
+        if args.network_size == 512:
+            cfg = change_cfg_for_ssd512(cfg)
         dataset = CARDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
@@ -112,8 +112,8 @@ def train():
 
     elif args.dataset == 'CARPLATE':
         cfg = carplate
-        if args.network_size==512:
-            cfg=change_cfg_for_ssd500(cfg)
+        if args.network_size == 512:
+            cfg = change_cfg_for_ssd512(cfg)
         dataset = CARPLATEDetection(root=args.dataset_root,
                                     transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),

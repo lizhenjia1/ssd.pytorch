@@ -157,7 +157,7 @@ def add_extras(cfg, i, batch_norm=False):
                 layers += [nn.Conv2d(in_channels, cfg[k + 1],
                            kernel_size=(1, 3)[flag], stride=2, padding=1)]
             else:
-                if k==11:
+                if k == 11:
                     layers += [nn.Conv2d(in_channels, v, kernel_size=4)]
                 else:
                     layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
@@ -203,7 +203,7 @@ def build_ssd(phase, size=300, num_classes=21):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300 and size !=512:
+    if size != 300 and size != 512:
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 SSD512 (size=300 or size=512) is supported!")
         return
