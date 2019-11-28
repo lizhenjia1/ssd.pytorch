@@ -5,7 +5,7 @@ from .carplate import CARPLATEDetection, CARPLATEAnnotationTransform, CARPLATE_C
 from .car_carplate_offset import CAR_CARPLATE_OFFSETDetection, CAR_CARPLATE_OFFSETAnnotationTransform, CAR_CARPLATE_OFFSET_CLASSES, CAR_CARPLATE_OFFSET_ROOT
 from .carplate_four_corners import CARPLATE_FOUR_CORNERSDetection, CARPLATE_FOUR_CORNERSAnnotationTransform, CARPLATE_FOUR_CORNERS_CLASSES, CARPLATE_FOUR_CORNERS_ROOT
 from .car_carplate_two_stage_end2end import CAR_CARPLATE_TWO_STAGE_END2ENDDetection, CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform, CAR_CARPLATE_TWO_STAGE_END2END_CLASSES, CAR_CARPLATE_TWO_STAGE_END2END_ROOT
-from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, COCO_ROOT, get_label_map
+#from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, COCO_ROOT, get_label_map
 from .config import *
 import torch
 import cv2
