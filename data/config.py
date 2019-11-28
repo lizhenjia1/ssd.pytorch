@@ -22,7 +22,7 @@ def change_cfg_for_ssd500(cfg):
     cfg['aspect_ratios']= [[2], [2, 3], [2, 3], [2, 3], [2], [2],[2]]
     return cfg
 
-    
+
 voc = {
     'num_classes': 21,
     'lr_steps': (80000, 100000, 120000),
@@ -180,7 +180,3 @@ two_stage_end2end = {
     'name': 'TWO_STAGE_END2END',
 }
 
-
-voc500={
-
-}
