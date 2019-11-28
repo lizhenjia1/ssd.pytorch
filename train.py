@@ -52,7 +52,7 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--network_size', default=512, type=int,help='SSD300 or SSD512')
+parser.add_argument('--network_size', default=300, type=int, help='SSD300 or SSD512')
 args = parser.parse_args()
 
 
