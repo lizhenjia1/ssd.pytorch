@@ -32,7 +32,7 @@ class SSD(nn.Module):
         self.num_classes = num_classes
         self.cfg = (coco, voc)[num_classes == 21]
         if size == 512:
-            self.cfg=change_cfg_for_ssd512(self.cfg)
+            self.cfg = change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)
         self.priors = Variable(self.priorbox.forward(), volatile=True)
         self.size = size

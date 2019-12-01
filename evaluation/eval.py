@@ -50,7 +50,7 @@ parser.add_argument('--voc_root', default=VOC_ROOT,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
-parser.add_argument('--input_size', default=512, type=int,
+parser.add_argument('--input_size', default=300, type=int,
                     help='SSD300 OR SSD512')
 
 args = parser.parse_args()
