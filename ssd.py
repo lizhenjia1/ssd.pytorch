@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from layers import *
 from data import voc, coco, car, carplate, car_carplate
 import os
+from data import *
 
 
 class SSD(nn.Module):
@@ -30,6 +31,8 @@ class SSD(nn.Module):
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = (coco, voc)[num_classes == 21]
+        if size == 512:
+            self.cfg=change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)
         self.priors = Variable(self.priorbox.forward(), volatile=True)
         self.size = size
