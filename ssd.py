@@ -198,7 +198,7 @@ extras = {
 }
 mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
-    '512': [4, 6, 6, 6, 4, 4, 4],
+    '512': [4, 6, 6, 6, 6, 4, 4],
 }
 
 
