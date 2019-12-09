@@ -15,6 +15,7 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 from torchsummary import summary
+from log import log
 
 
 def str2bool(v):
@@ -153,10 +154,10 @@ def train():
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
 
-    # optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-    #                       weight_decay=args.weight_decay)
-    optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999),
-                           weight_decay=args.weight_decay)
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+                          weight_decay=args.weight_decay)
+    # optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999),
+    #                        weight_decay=args.weight_decay)
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
 
@@ -184,6 +185,8 @@ def train():
                                   num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate,
                                   pin_memory=True)
+
+    lr = args.lr
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
@@ -197,7 +200,7 @@ def train():
 
         if iteration in cfg['lr_steps']:
             step_index += 1
-            adjust_learning_rate(optimizer, args.gamma, step_index)
+            lr = adjust_learning_rate(optimizer, args.gamma, epoch, step_index, iteration, epoch_size)
 
         # load train data
         try:
@@ -226,8 +229,12 @@ def train():
         conf_loss += loss_c.data[0]
 
         if iteration % 10 == 0:
-            print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            log.l.info('''
+                Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss_l: {:.5f}.\t Loss_c: {:.5f}.\t Loss: {:.5f}.
+                '''.format((t1-t0), lr, iteration, loss_l.data[0], loss_c.data[0],
+                loss_l.data[0] + loss_c.data[0]))
+            # print('timer: %.4f sec.' % (t1 - t0))
+            # print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
@@ -241,15 +248,19 @@ def train():
                'weights/' + args.save_folder + '' + args.dataset + '.pth')
 
 
-def adjust_learning_rate(optimizer, gamma, step):
+def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):
     """Sets the learning rate to the initial LR decayed by 10 at every
         specified step
     # Adapted from PyTorch Imagenet example:
     # https://github.com/pytorch/examples/blob/master/imagenet/main.py
     """
-    lr = args.lr * (gamma ** (step))
+    if epoch < 6:
+        lr = 1e-6 + (args.lr-1e-6) * iteration / (epoch_size * 5) 
+    else:
+        lr = args.lr * (gamma ** (step_index))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def xavier(param):
