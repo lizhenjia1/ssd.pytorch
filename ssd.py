@@ -165,7 +165,8 @@ def add_extras(cfg, size, i, batch_norm=False):
         in_channels = v
     # SSD512 need add one more Conv layer(Conv12_2)
     if size == 512:
-        layers += [nn.Conv2d(in_channels, 256, kernel_size=4, padding=1)]
+        layers += [nn.Conv2d(in_channels, 128, kernel_size=1, stride=1)]
+        layers += [nn.Conv2d(128, 256, kernel_size=4, stride=1, padding=1)]
     return layers
 
 
@@ -194,7 +195,7 @@ base = {
 }
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
-    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128],
+    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256],
 }
 mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
