@@ -233,8 +233,6 @@ def train():
                 Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss_l: {:.5f}.\t Loss_c: {:.5f}.\t Loss: {:.5f}.
                 '''.format((t1-t0), lr, iteration, loss_l.item(), loss_c.item(),
                 loss_l.item() + loss_c.item()))
-            # print('timer: %.4f sec.' % (t1 - t0))
-            # print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.item()), end=' ')
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.item(), loss_c.item(),
