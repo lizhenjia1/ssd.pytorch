@@ -7,6 +7,10 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 from torch.autograd import Variable
+
+import sys
+sys.path.append(".")
+
 from data import VOC_ROOT, VOC_CLASSES as labelmap
 from PIL import Image
 from data import VOCAnnotationTransform, VOCDetection, BaseTransform, VOC_CLASSES
