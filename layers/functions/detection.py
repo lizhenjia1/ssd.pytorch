@@ -1,6 +1,6 @@
 import torch
 from torch.autograd import Function
-from ..box_utils import decode, decode_offset, decode_four_corners, nms
+from ..box_utils import decode, decode_offset, decode_size, decode_four_corners, nms
 from data import voc as cfg
 
 
@@ -88,6 +88,12 @@ class Detect_offset(Function):
                 Shape: [batch,num_priors,num_classes]
             prior_data: (tensor) Prior boxes and variances from priorbox layers
                 Shape: [num_priors,4]
+            has_lp_data: (tensor) Has LP preds from has_lp layers
+                Shape: [batch,num_priors,1]
+            size_lp_data: (tensor) Size LP preds from size_lp layers
+                Shape: [batch,num_priors,2]
+            offset_data: (tensor) Offset preds from offset layers
+                Shape: [batch,num_priors,2]
         """
 
         num = loc_data.size(0)  # batch size
@@ -95,21 +101,21 @@ class Detect_offset(Function):
         output = torch.zeros(num, self.num_classes, self.top_k, 10)
         conf_preds = conf_data.view(num, num_priors,
                                     self.num_classes).transpose(2, 1)  # [batch,num_classes,num_priors]
-        has_lp_preds = has_lp_data.view(num, num_priors, 2).transpose(2, 1)  # [batch,2,num_priors]
+        has_lp_preds = has_lp_data.view(num, num_priors, 1).transpose(2, 1)  # [batch,1,num_priors]
 
         # Decode predictions into bboxes.
         for i in range(num):
             decoded_boxes = decode(loc_data[i], prior_data, self.variance)  # [num_priors,4]
-            decoded_size_lp = decode_offset(size_lp_data[i], prior_data, self.variance)  # [num_priors,2]
+            decoded_size_lp = decode_size(size_lp_data[i], prior_data, self.variance)  # [num_priors,2]
             decoded_offset = decode_offset(offset_data[i], prior_data, self.variance)  # [num_priors,2]
             # For each class, perform nms
             conf_scores = conf_preds[i].clone()  # [num_classes,num_priors]
-            has_lp_scores = has_lp_preds[i].clone()  # [2,num_priors]
+            has_lp_scores = has_lp_preds[i].clone()  # [1,num_priors]
 
             for cl in range(1, self.num_classes):  # 从1开始，去掉了背景
                 c_mask = conf_scores[cl].gt(self.conf_thresh)  # [num_priors]
                 scores = conf_scores[cl][c_mask]  # [number great than conf_threshold]
-                scores_lp = has_lp_scores[cl][c_mask]
+                scores_lp = has_lp_scores[0][c_mask]
                 if scores.size(0) == 0:
                     continue
 

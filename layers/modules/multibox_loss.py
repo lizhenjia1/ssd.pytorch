@@ -121,28 +121,6 @@ class MultiBoxLoss(nn.Module):
 
 
 class MultiBoxLoss_offset(nn.Module):
-    """SSD Weighted Loss Function
-    Compute Targets:
-        1) Produce Confidence Target Indices by matching  ground truth boxes
-           with (default) 'priorboxes' that have jaccard index > threshold parameter
-           (default threshold: 0.5).
-        2) Produce localization target by 'encoding' variance into offsets of ground
-           truth boxes and their matched  'priorboxes'.
-        3) Hard negative mining to filter the excessive number of negative examples
-           that comes with using a large number of default bounding boxes.
-           (default negative:positive ratio 3:1)
-    Objective Loss:
-        L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-        Where, Lconf is the CrossEntropy Loss and Lloc is the SmoothL1 Loss
-        weighted by α which is set to 1 by cross val.
-        Args:
-            c: class confidences,
-            l: predicted boxes,
-            g: ground truth boxes
-            N: number of matched default boxes
-        See: https://arxiv.org/pdf/1512.02325.pdf for more details.
-    """
-
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
                  use_gpu=True):
@@ -161,17 +139,17 @@ class MultiBoxLoss_offset(nn.Module):
     def forward(self, predictions, targets):
         """Multibox Loss
         Args:
-            predictions (tuple): A tuple containing loc preds, conf preds,
+            predictions (tuple): A tuple containing loc preds, conf preds, has_lp preds, size_lp preds, offset preds
             and prior boxes from SSD net.
                 conf shape: torch.size(batch_size,num_priors,num_classes)
                 loc shape: torch.size(batch_size,num_priors,4)
                 priors shape: torch.size(num_priors,4)
-                has_lp shape: torch.size(batch_size,num_priors,2)
+                has_lp shape: torch.size(batch_size,num_priors,1)
                 size_lp shape: torch.size(batch_size,num_priors,2)
                 offset shape: torch.size(batch_size,num_priors,2)
 
             targets (tensor): Ground truth boxes and labels for a batch,
-                shape: [batch_size,num_objs,5] (last idx is the label).
+                shape: [batch_size,num_objs,10] (last idx is the label).
         """
         loc_data, conf_data, priors, has_lp_data, size_lp_data, offset_data = predictions
 
@@ -214,25 +192,28 @@ class MultiBoxLoss_offset(nn.Module):
 
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)
+
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
 
-        # Size Loss (Smooth L1), only for positive prior
+        # Size Loss (Smooth L1), only for positive prior and has lp
         # Shape: [batch,num_priors,2]
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(size_lp_data)
-        has_lp_idx = has_lp_t.unsqueeze(pos.dim()).expand_as(size_lp_data)[pos_idx].view(-1, 2).float()
+        has_lp_idx = has_lp_t.unsqueeze(pos.dim()).expand_as(size_lp_data).view(num, num_priors, 2) > 0
 
-        size_lp_p = size_lp_data[pos_idx].view(-1, 2)
-        size_lp_t = size_lp_t[pos_idx].view(-1, 2)
+        size_lp_p = size_lp_data[pos_idx & has_lp_idx].view(-1, 2)
+        size_lp_t = size_lp_t[pos_idx & has_lp_idx].view(-1, 2)
+        
+        loss_size_lp = F.smooth_l1_loss(size_lp_p, size_lp_t, size_average=False)
 
-        loss_size_lp = F.smooth_l1_loss(size_lp_p * has_lp_idx, size_lp_t * has_lp_idx, size_average=False)
-
-        # Offset Loss (Smooth L1), only for positive prior
+        # Offset Loss (Smooth L1), only for positive prior and has lp
         # Shape: [batch,num_priors,2]
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(offset_data)
-        has_lp_idx = has_lp_t.unsqueeze(pos.dim()).expand_as(offset_data)[pos_idx].view(-1, 2).float()
-        offset_p = offset_data[pos_idx].view(-1, 2)
-        offset_t = offset_t[pos_idx].view(-1, 2)
-        loss_offset = F.smooth_l1_loss(offset_p * has_lp_idx, offset_t * has_lp_idx, size_average=False)
+        has_lp_idx = has_lp_t.unsqueeze(pos.dim()).expand_as(offset_data).view(num, num_priors, 2) > 0
+
+        offset_p = offset_data[pos_idx & has_lp_idx].view(-1, 2)
+        offset_t = offset_t[pos_idx & has_lp_idx].view(-1, 2)
+
+        loss_offset = F.smooth_l1_loss(offset_p, offset_t, size_average=False)
 
         # Compute max conf across batch for hard negative mining
         batch_conf = conf_data.view(-1, self.num_classes)
@@ -252,17 +233,22 @@ class MultiBoxLoss_offset(nn.Module):
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
+
         conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
         targets_weighted = conf_t[(pos+neg).gt(0)]
 
         loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
 
-        # Has Carplate Loss (Cross Entropy), Including Positive and Negative Examples
-        has_lp_p = has_lp_data[(pos_idx+neg_idx).gt(0)].view(-1, 2)
-        has_lp_t = has_lp_t[(pos+neg).gt(0)]
-        loss_has_lp = F.cross_entropy(has_lp_p, has_lp_t, size_average=False)
+        # Has Carplate Loss (Binary Cross Entropy), Including Positive and Negative Examples
+        pos_idx = pos.unsqueeze(2).expand_as(has_lp_data)
+        neg_idx = neg.unsqueeze(2).expand_as(has_lp_data)
 
-        # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
+        has_lp_p = has_lp_data[(pos_idx+neg_idx).gt(0)].view(-1, 1).float()
+        has_lp_t = has_lp_t[(pos+neg).gt(0)].view(-1, 1).float()
+
+        loss_has_lp = F.binary_cross_entropy(torch.sigmoid(has_lp_p), has_lp_t, size_average=False)
+
+        # Sum of losses
 
         N = num_pos.data.sum().double()
         loss_l = loss_l.double()
