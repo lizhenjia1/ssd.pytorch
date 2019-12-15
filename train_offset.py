@@ -203,7 +203,7 @@ def train():
         offset_loss += loss_offset.item()
         has_lp_loss += loss_has_lp.item()
 
-        if iteration % 10 == 0:
+        if iteration % 100 == 0:
             log.l.info('''
                 Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss_l: {:.5f}.\t Loss_c: {:.5f}.\t Loss_size_lp: {:.5f}.\t Loss_offset: {:.5f}.\t Loss_has_lp: {:.5f}.\t Loss: {:.5f}.
                 '''.format((t1-t0), lr, iteration, loss_l.item(), loss_c.item(), loss_size_lp.item(), loss_offset.item(), loss_has_lp.item(),

@@ -194,7 +194,7 @@ def train():
         conf_loss += loss_c.item()
         four_corners_loss += loss_four_corners.item()
 
-        if iteration % 10 == 0:
+        if iteration % 100 == 0:
             log.l.info('''
                 Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss_l: {:.5f}.\t Loss_c: {:.5f}.\t Loss_four_corners: {:.5f}.\t Loss: {:.5f}.
                 '''.format((t1-t0), lr, iteration, loss_l.item(), loss_c.item(), loss_four_corners.item(),
@@ -204,7 +204,7 @@ def train():
             update_vis_plot(iteration, loss_l.item(), loss_c.item(), loss_four_corners.item(),
             iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 100 == 0:
+        if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
