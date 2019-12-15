@@ -249,7 +249,6 @@ class MultiBoxLoss_offset(nn.Module):
         loss_has_lp = F.binary_cross_entropy(torch.sigmoid(has_lp_p), has_lp_t, size_average=False)
 
         # Sum of losses
-
         N = num_pos.data.sum().double()
         loss_l = loss_l.double()
         loss_c = loss_c.double()
@@ -265,28 +264,6 @@ class MultiBoxLoss_offset(nn.Module):
 
 
 class MultiBoxLoss_four_corners(nn.Module):
-    """SSD Weighted Loss Function
-    Compute Targets:
-        1) Produce Confidence Target Indices by matching  ground truth boxes
-           with (default) 'priorboxes' that have jaccard index > threshold parameter
-           (default threshold: 0.5).
-        2) Produce localization target by 'encoding' variance into offsets of ground
-           truth boxes and their matched  'priorboxes'.
-        3) Hard negative mining to filter the excessive number of negative examples
-           that comes with using a large number of default bounding boxes.
-           (default negative:positive ratio 3:1)
-    Objective Loss:
-        L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-        Where, Lconf is the CrossEntropy Loss and Lloc is the SmoothL1 Loss
-        weighted by α which is set to 1 by cross val.
-        Args:
-            c: class confidences,
-            l: predicted boxes,
-            g: ground truth boxes
-            N: number of matched default boxes
-        See: https://arxiv.org/pdf/1512.02325.pdf for more details.
-    """
-
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
                  use_gpu=True):
@@ -347,15 +324,19 @@ class MultiBoxLoss_four_corners(nn.Module):
         # Localization Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,4]
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
+
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)
+
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
 
         # Corner Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,8]
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)
+
         four_corners_p = four_corners_data[pos_idx].view(-1, 8)
         four_corners_t = four_corners_t[pos_idx].view(-1, 8)
+
         loss_four_corners = F.smooth_l1_loss(four_corners_p, four_corners_t, size_average=False)
 
         # Compute max conf across batch for hard negative mining
@@ -376,11 +357,13 @@ class MultiBoxLoss_four_corners(nn.Module):
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
+
         conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
         targets_weighted = conf_t[(pos+neg).gt(0)]
+
         loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
 
-        # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
+        # Sum of losses
         N = num_pos.data.sum().double()
         loss_l = loss_l.double()
         loss_c = loss_c.double()

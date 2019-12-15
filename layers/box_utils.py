@@ -157,22 +157,6 @@ def match_offset(threshold, truths, priors, variances, labels, loc_t, conf_t, ha
 
 
 def match_four_corners(threshold, truths, priors, variances, labels, loc_t, conf_t, four_corners_t, idx):
-    """Match each prior box with the ground truth box of the highest jaccard
-    overlap, encode the bounding boxes, then return the matched indices
-    corresponding to both confidence and location preds.
-    Args:
-        threshold: (float) The overlap threshold used when mathing boxes.
-        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
-        priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
-        variances: (tensor) Variances corresponding to each prior coord,
-            Shape: [num_priors, 4].
-        labels: (tensor) All the class labels for the image, Shape: [num_obj].
-        loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
-        conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
-        idx: (int) current batch index
-    Return:
-        The matched indices corresponding to 1)location and 2)confidence preds.
-    """
     # jaccard index
     overlaps = jaccard(
         truths,
@@ -303,18 +287,6 @@ def encode_size(matched, priors, variances):
 
 
 def encode_four_corners(matched, priors, variances):
-    """Encode the variances from the priorbox layers into the ground truth boxes
-    we have matched (based on jaccard overlap) with the prior boxes.
-    Args:
-        matched: (tensor) Coords of ground truth for each prior in point-form
-            Shape: [num_priors, 4].
-        priors: (tensor) Prior boxes in center-offset form
-            Shape: [num_priors,4].
-        variances: (list[float]) Variances of priorboxes
-    Return:
-        encoded boxes (tensor), Shape: [num_priors, 4]
-    """
-
     priors_center = priors[:, :2].repeat(1, 4)
     priors_size = priors[:, 2:].repeat(1, 4)
 
@@ -359,24 +331,11 @@ def decode_size(output, priors, variances):
     return res
 
 
-# Adapted from https://github.com/Hakuyume/chainer-ssd
 def decode_four_corners(corners, priors, variances):
-    """Decode locations from predictions using priors to undo
-    the encoding we did for offset regression at train time.
-    Args:
-        loc (tensor): location predictions for loc layers,
-            Shape: [num_priors,4]
-        priors (tensor): Prior boxes in center-offset form.
-            Shape: [num_priors,4].
-        variances: (list[float]) Variances of priorboxes
-    Return:
-        decoded bounding box predictions
-    """
     priors_center = priors[:, :2].repeat(1, 4)
     priors_size = priors[:, 2:].repeat(1, 4)
 
     res = priors_center + corners * variances[0] * priors_size
-
     return res
 
 

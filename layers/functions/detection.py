@@ -167,6 +167,8 @@ class Detect_four_corners(Function):
                 Shape: [batch,num_priors,num_classes]
             prior_data: (tensor) Prior boxes and variances from priorbox layers
                 Shape: [num_priors,4]
+            four_corners_data: (tensor) Four corners preds from four_corners layers
+                Shape: [batch,num_priors,8]
         """
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)
