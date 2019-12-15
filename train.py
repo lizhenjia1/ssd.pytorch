@@ -230,7 +230,7 @@ def train():
         loc_loss += loss_l.item()
         conf_loss += loss_c.item()
 
-        if iteration % 10 == 0:
+        if iteration % 100 == 0:
             log.l.info('''
                 Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss_l: {:.5f}.\t Loss_c: {:.5f}.\t Loss: {:.5f}.
                 '''.format((t1-t0), lr, iteration, loss_l.item(), loss_c.item(),
