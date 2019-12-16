@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import two_stage_end2end
+from data import two_stage_end2end, change_cfg_for_ssd512
 import os
 import numpy as np
 
 from layers.modules import ProposalTargetLayer_offset
-# https://github.com/longcw/RoIAlign.pytorch中的pytorch_0.4分支
+# https://github.com/longcw/RoIAlign.pytorch
 from roi_align.crop_and_resize import CropAndResizeFunction
 
 
@@ -54,10 +54,14 @@ class SSD_two_stage_end2end(nn.Module):
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = two_stage_end2end
+        if size == 512:
+            self.cfg = change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)
-        self.priors = Variable(self.priorbox.forward(), volatile=True)
+        with torch.no_grad():
+            self.priors = Variable(self.priorbox.forward())
         self.priorbox_2 = PriorBox_2(self.cfg)
-        self.priors_2 = Variable(self.priorbox_2.forward(), volatile=True)
+        with torch.no_grad():
+            self.priors_2 = Variable(self.priorbox_2.forward())
         self.size = size
         self.size_2 = size_2
         self.expand_num = expand_num
@@ -75,6 +79,7 @@ class SSD_two_stage_end2end(nn.Module):
         self.offset = nn.ModuleList(head[4])
 
         self.softmax = nn.Softmax(dim=-1)
+        self.sigmoid = nn.Sigmoid()
         self.detect = Detect_offset(num_classes, 0, 200, 0.01, 0.45)
 
         # SSD network
@@ -165,7 +170,7 @@ class SSD_two_stage_end2end(nn.Module):
             self.softmax(conf.view(conf.size(0), -1,
                                    self.num_classes)),  # conf preds
             self.priors.cuda(),  # default boxes 这个地方按照之前会有重大bug,参数分布在不同GPU上
-            self.softmax(has_lp.view(has_lp.size(0), -1, 2)),
+            self.sigmoid(has_lp.view(has_lp.size(0), -1, 1)),
             size_lp.view(size_lp.size(0), -1, 2),
             offset.view(offset.size(0), -1, 2)
         )
@@ -218,7 +223,7 @@ class SSD_two_stage_end2end(nn.Module):
                     has_lp_list.append(targets_tensor[i, 4].cpu().numpy() > 0)
 
                 gt_in_rois_list = np.array(a_include_b_list) + 0 & np.array(has_lp_list) + 0
-                gt_in_rois_tensor = torch.tensor(gt_in_rois_list).type(torch.uint8)
+                gt_in_rois_tensor = torch.tensor(gt_in_rois_list).type(torch.uint8).bool()
                 rois_squeeze = rois_squeeze[gt_in_rois_tensor, :]
                 lp_bbox = lp_bbox[gt_in_rois_tensor, :]
                 lp_four_points = lp_four_points[gt_in_rois_tensor, :]
@@ -278,7 +283,7 @@ class SSD_two_stage_end2end(nn.Module):
 
                 # Crops and resize bbox1 from img1 and bbox2 from img2
                 # n*64*crop_height*crop_width
-                crops_torch = CropAndResizeFunction(crop_height, crop_width, 0)(image_torch, boxes, box_index)
+                crops_torch = CropAndResizeFunction.apply(image_torch, boxes, box_index, crop_height, crop_width, 0)
 
                 # 第二个网络!!!!!!!!!!!!!!!!!!!!!!!!!!
                 x_2 = crops_torch
@@ -312,7 +317,7 @@ class SSD_two_stage_end2end(nn.Module):
                     loc.view(loc.size(0), -1, 4),
                     conf.view(conf.size(0), -1, self.num_classes),
                     self.priors,
-                    has_lp.view(has_lp.size(0), -1, 2),
+                    has_lp.view(has_lp.size(0), -1, 1),
                     size_lp.view(size_lp.size(0), -1, 2),
                     offset.view(offset.size(0), -1, 2),
                     # 第二个网络 TODO: 这是非常不友好的做法
@@ -327,7 +332,7 @@ class SSD_two_stage_end2end(nn.Module):
                     loc.view(loc.size(0), -1, 4),
                     conf.view(conf.size(0), -1, self.num_classes),
                     self.priors,
-                    has_lp.view(has_lp.size(0), -1, 2),
+                    has_lp.view(has_lp.size(0), -1, 1),
                     size_lp.view(size_lp.size(0), -1, 2),
                     offset.view(offset.size(0), -1, 2),
                     # 第二个网络
@@ -378,7 +383,7 @@ class SSD_two_stage_end2end(nn.Module):
             boxes_data[:, 2] = rois_squeeze[:, 3]
             boxes_data[:, 3] = rois_squeeze[:, 2]
 
-            # Create an index to say which box crops which image
+            # Create an index to indicate which box crops which image
             box_index_data = torch.IntTensor(range(boxes_data.shape[0]))
 
             # Create a batch of 2 images
@@ -393,7 +398,7 @@ class SSD_two_stage_end2end(nn.Module):
 
             # Crops and resize bbox1 from img1 and bbox2 from img2
             # n*64*crop_height*crop_width
-            crops_torch = CropAndResizeFunction(crop_height, crop_width, 0)(image_torch, boxes, box_index)
+            crops_torch = CropAndResizeFunction.apply(image_torch, boxes, box_index, crop_height, crop_width, 0)
 
             # 第二个网络!!!!!!!!!!!!!!!!!!!!!!!!!!
             x_2 = crops_torch
@@ -522,7 +527,7 @@ def vgg_2(cfg, i, batch_norm=False):
     return layers
 
 
-def add_extras(cfg, i, batch_norm=False):
+def add_extras(cfg, size, i, batch_norm=False):
     # Extra layers added to VGG for feature scaling
     layers = []
     in_channels = i
@@ -536,6 +541,10 @@ def add_extras(cfg, i, batch_norm=False):
                 layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
             flag = not flag
         in_channels = v
+    # SSD512 need add two more Conv layer
+    if size == 512:
+        layers += [nn.Conv2d(in_channels, 128, kernel_size=1, stride=1)]
+        layers += [nn.Conv2d(128, 256, kernel_size=4, stride=1, padding=1)]
     return layers
 
 
@@ -557,7 +566,7 @@ def multibox(vgg, extra_layers, cfg, num_classes, vgg_2, cfg_2):
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
         has_lp_layers += [nn.Conv2d(vgg[v].out_channels,
-                                  cfg[k] * 2, kernel_size=3, padding=1)]  # 有车牌或者无车牌
+                                  cfg[k] * 1, kernel_size=3, padding=1)]
         size_lp_layers += [nn.Conv2d(vgg[v].out_channels,
                                   cfg[k] * 2, kernel_size=3, padding=1)]
         offset_layers += [nn.Conv2d(vgg[v].out_channels,
@@ -568,7 +577,7 @@ def multibox(vgg, extra_layers, cfg, num_classes, vgg_2, cfg_2):
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
         has_lp_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                  * 2, kernel_size=3, padding=1)]  # 有车牌或者无车牌
+                                  * 1, kernel_size=3, padding=1)]
         size_lp_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * 2, kernel_size=3, padding=1)]
         offset_layers += [nn.Conv2d(v.out_channels, cfg[k]
@@ -589,21 +598,18 @@ def multibox(vgg, extra_layers, cfg, num_classes, vgg_2, cfg_2):
 base = {
     '300': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
             512, 512, 512],
-    '140': [64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-            512, 512, 512],
     '28': [256, 256, 256, 256],
-    '512': [],
+    '512': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
+            512, 512, 512],
 }
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
-    '140': [256, 'S', 512, 128, 'S', 256, 128, 256],
-    '512': [],
+    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256],
 }
 mbox = {
-    '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
-    '140': [4, 6, 6, 6, 4],
+    '300': [4, 6, 6, 6, 4, 4],
     '28': [4, 6, 6],
-    '512': [],
+    '512': [4, 6, 6, 6, 6, 4, 4],
 }
 
 
@@ -611,12 +617,12 @@ def build_ssd(phase, size=300, size_2=28, num_classes=21, expand_num=3):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300:
+    if size != 300 and size != 512:
         print("ERROR: You specified size " + repr(size) + ". However, " +
-              "currently only SSD300 (size=300) is supported!")
+              "currently only SSD300 SSD512 (size=300 or size=512) is supported!")
         return
     base_, extras_, head_, base_2_, head_2_ = multibox(vgg(base[str(size)], 3),
-                                                      add_extras(extras[str(size)], 1024),
+                                                      add_extras(extras[str(size)], size, 1024),
                                                       mbox[str(size)],
                                                       num_classes,
                                                       vgg_2(base[str(size_2)], 64),

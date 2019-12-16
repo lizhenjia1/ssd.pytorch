@@ -9,20 +9,31 @@ import sys
 sys.path.append(".")
 
 from ssd_two_stage_end2end import build_ssd
+import argparse
 
-net = build_ssd('test', 300, 28, 2, 3)    # initialize SSD
-net.load_weights('weights/two_stage_end2end_weights/ssd300_35000.pth')
+parser = argparse.ArgumentParser(
+    description='Single Shot MultiBox Detector Testing With Pytorch')
+parser.add_argument('--input_size', default=300, type=int, help='SSD300 or SSD512')
+parser.add_argument('--input_size_2', default=28, type=int, help='input size of the second network')
+parser.add_argument('--expand_num', default=3, type=int, help='expand ratio around the license plate')
+parser.add_argument('--trained_model',
+                    default='weights/voc_weights/VOC300.pth', type=str,
+                    help='Trained state_dict file path to open')
+args = parser.parse_args()
+
+net = build_ssd('test', args.input_size, args.input_size_2, 2, args.expand_num)    # initialize SSD
+net.load_weights(args.trained_model)
 
 # matplotlib inline
 from matplotlib import pyplot as plt
-from data import CAR_CARPLATE_OFFSETDetection, CAR_CARPLATE_OFFSETAnnotationTransform, CAR_CARPLATE_OFFSET_ROOT
-testset = CAR_CARPLATE_OFFSETDetection(CAR_CARPLATE_OFFSET_ROOT, None, None, CAR_CARPLATE_OFFSETAnnotationTransform(),
-                                       dataset_name='test')
+from data import CAR_CARPLATE_TWO_STAGE_END2ENDDetection, CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform, CAR_CARPLATE_TWO_STAGE_END2END_ROOT
+testset = CAR_CARPLATE_TWO_STAGE_END2ENDDetection(CAR_CARPLATE_TWO_STAGE_END2END_ROOT, None, None, CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform(),
+                                       dataset_name='trainval')
 for img_id in range(40):
     image = testset.pull_image(img_id)
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    x = cv2.resize(image, (300, 300)).astype(np.float32)
+    x = cv2.resize(image, (args.input_size, args.input_size)).astype(np.float32)
     x -= (104.0, 117.0, 123.0)
     x = x.astype(np.float32)
     x = x[:, :, ::-1].copy()
@@ -40,7 +51,7 @@ for img_id in range(40):
     if y1_idx.shape == torch.Size([0]):
         continue
 
-    from data import CAR_CARPLATE_OFFSET_CLASSES as labels
+    from data import CAR_CARPLATE_TWO_STAGE_END2END_CLASSES as labels
 
     fig = plt.figure(figsize=(10, 10))
     colors = plt.cm.hsv(np.linspace(0, 1, 21)).tolist()
@@ -108,7 +119,6 @@ for img_id in range(40):
                         corners_x = np.append(four_corners[0::2], four_corners[0])
                         corners_y = np.append(four_corners[1::2], four_corners[1])
                         currentAxis.plot(corners_x, corners_y, linewidth=1)
-
 
     plt.show()
 

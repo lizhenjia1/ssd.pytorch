@@ -1,6 +1,6 @@
 from data import *
-from utils.augmentations import SSDAugmentation, SSDAugmentation_two_stage_end2end
-from layers.modules import MultiBoxLoss, MultiBoxLoss_offset, MultiBoxLoss_four_corners, MultiBoxLoss_four_corners_with_border
+from utils.augmentations import SSDAugmentation_two_stage_end2end
+from layers.modules import MultiBoxLoss_offset, MultiBoxLoss_four_corners, MultiBoxLoss_four_corners_with_border
 from ssd_two_stage_end2end import build_ssd
 import os
 import sys
@@ -15,6 +15,7 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 from torchsummary import summary
+from log import log
 
 
 def str2bool(v):
@@ -24,8 +25,8 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'TWO_STAGE_END2END'],
-                    type=str, help='VOC or COCO')
+parser.add_argument('--dataset', default='TWO_STAGE_END2END', choices=['TWO_STAGE_END2END'],
+                    type=str, help='TWO_STAGE_END2END')
 parser.add_argument('--dataset_root', default=VOC_ROOT,
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
@@ -52,6 +53,7 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
+parser.add_argument('--input_size', default=300, type=int, help='SSD300 or SSD512')
 args = parser.parse_args()
 
 
@@ -70,27 +72,10 @@ if not os.path.exists('weights/' + args.save_folder):
 
 
 def train():
-    if args.dataset == 'COCO':
-        if args.dataset_root == VOC_ROOT:
-            if not os.path.exists(COCO_ROOT):
-                parser.error('Must specify dataset_root if specifying dataset')
-            print("WARNING: Using default COCO dataset_root because " +
-                  "--dataset_root was not specified.")
-            args.dataset_root = COCO_ROOT
-        cfg = coco
-        dataset = COCODetection(root=args.dataset_root,
-                                transform=SSDAugmentation(cfg['min_dim'],
-                                                          MEANS))
-    elif args.dataset == 'VOC':
-        if args.dataset_root == COCO_ROOT:
-            parser.error('Must specify dataset if specifying dataset_root')
-        cfg = voc
-        dataset = VOCDetection(root=args.dataset_root,
-                               transform=SSDAugmentation(cfg['min_dim'],
-                                                         MEANS))
-
-    elif args.dataset == 'TWO_STAGE_END2END':
+    if args.dataset == 'TWO_STAGE_END2END':
         cfg = two_stage_end2end
+        if args.input_size == 512:
+            cfg = change_cfg_for_ssd512(cfg)
         dataset = CAR_CARPLATE_TWO_STAGE_END2ENDDetection(root=args.dataset_root,
                                     transform=SSDAugmentation_two_stage_end2end(cfg['min_dim'],
                                                          MEANS),
@@ -105,7 +90,7 @@ def train():
     net = ssd_net
 
     # summary
-    # summary(net, input_size=(3, 300, 300))
+    # summary(net, input_size=(3, int(cfg['min_dim']), int(cfg['min_dim'])))
 
     if args.cuda:
         net = torch.nn.DataParallel(ssd_net)
@@ -181,6 +166,7 @@ def train():
                                   num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate,
                                   pin_memory=True)
+    lr = args.lr
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
@@ -202,7 +188,7 @@ def train():
 
         if iteration in cfg['lr_steps']:
             step_index += 1
-            adjust_learning_rate(optimizer, args.gamma, step_index)
+            lr = adjust_learning_rate(optimizer, args.gamma, epoch, step_index, iteration, epoch_size)
 
         # load train data
         try:
@@ -213,10 +199,12 @@ def train():
 
         if args.cuda:
             images = Variable(images.cuda())
-            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            with torch.no_grad():
+                targets = [Variable(ann.cuda()) for ann in targets]
         else:
             images = Variable(images)
-            targets = [Variable(ann, volatile=True) for ann in targets]
+            with torch.no_grad():
+                targets = [Variable(ann) for ann in targets]
         # forward
         t0 = time.time()
         out = net(images, targets)
@@ -226,7 +214,7 @@ def train():
         # offset fine-tuning and pre-training(only loss_l and loss_c)
         loss_l, loss_c, loss_size_lp, loss_offset, loss_has_lp = criterion(out_1, targets)
         loss_1 = loss_l + loss_c + loss_size_lp + loss_offset + loss_has_lp
-        # 第二阶段网络的损失,先看是否有target,target最后以为表示GT是否是valid,只有valid才能加入loss计算
+        # 第二阶段网络的损失,先看是否有target,target最后一位表示GT是否是valid,只有valid才能加入loss计算
         loc_2_data, conf_2_data, priors_2, four_corners_2_data = out[6:-1]
         targets_2 = out[-1]
         valid_idx = targets_2[:, -1] == 1
@@ -252,51 +240,56 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
-        size_lp_loss += loss_size_lp.data[0]
-        offset_loss += loss_offset.data[0]
-        has_lp_loss += loss_has_lp.data[0]
+        loc_loss += loss_l.item()
+        conf_loss += loss_c.item()
+        size_lp_loss += loss_size_lp.item()
+        offset_loss += loss_offset.item()
+        has_lp_loss += loss_has_lp.item()
         if targets_2.shape[0] > 0:
-            loc_2_loss += loss_l_2.data[0]
-            conf_2_loss += loss_c_2.data[0]
-            four_corners_2_loss += loss_four_corners_2.data[0]
-            border_2_loss += loss_border_2.data[0]
+            loc_2_loss += loss_l_2.item()
+            conf_2_loss += loss_c_2.item()
+            four_corners_2_loss += loss_four_corners_2.item()
+            border_2_loss += loss_border_2.item()
 
         if iteration % 10 == 0:
-            print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            log.l.info('''
+                Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss: {:.5f}.
+                '''.format((t1-t0), lr, iteration, loss.item()))
 
         if args.visdom:
             if targets_2.shape[0] > 0:
-                update_vis_plot(iteration, loss_l.data[0], loss_c.data[0], loss_size_lp.data[0], loss_offset.data[0],
-                                loss_has_lp.data[0], loss_l_2.data[0], loss_c_2.data[0],
-                                loss_four_corners_2.data[0], loss_border_2.data[0], iter_plot, epoch_plot, 'append')
+                update_vis_plot(iteration, loss_l.item(), loss_c.item(), loss_size_lp.item(), loss_offset.item(),
+                                loss_has_lp.item(), loss_l_2.item(), loss_c_2.item(),
+                                loss_four_corners_2.item(), loss_border_2.item(), iter_plot, epoch_plot, 'append')
             else:
-                update_vis_plot(iteration, loss_l.data[0], loss_c.data[0], loss_size_lp.data[0], loss_offset.data[0],
-                                loss_has_lp.data[0], 0, 0, 0, 0, iter_plot, epoch_plot, 'append')
+                update_vis_plot(iteration, loss_l.item(), loss_c.item(), loss_size_lp.item(), loss_offset.item(),
+                                loss_has_lp.item(), 0, 0, 0, 0, iter_plot, epoch_plot, 'append')
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd300_' +
-                       repr(iteration) + '.pth')
+            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
+            str(args.input_size) + '_' + repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
-               'weights/' + args.save_folder + '' + args.dataset + '.pth')
+               'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth')
 
 
-def adjust_learning_rate(optimizer, gamma, step):
+def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):
     """Sets the learning rate to the initial LR decayed by 10 at every
         specified step
     # Adapted from PyTorch Imagenet example:
     # https://github.com/pytorch/examples/blob/master/imagenet/main.py
     """
-    lr = args.lr * (gamma ** (step))
+    if epoch < 6:
+        lr = 1e-6 + (args.lr-1e-6) * iteration / (epoch_size * 5) 
+    else:
+        lr = args.lr * (gamma ** (step_index))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def xavier(param):
-    init.xavier_uniform(param)
+    init.xavier_uniform_(param)
 
 
 def weights_init(m):
