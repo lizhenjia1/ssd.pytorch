@@ -78,7 +78,7 @@ imgsetpath = os.path.join(args.voc_root, 'ImageSets',
                           'Main', '{:s}.txt')
 devkit_path = args.voc_root
 dataset_mean = (104, 117, 123)
-set_type = 'test'
+set_type = 'trainval'
 
 
 class Timer(object):
@@ -115,7 +115,7 @@ def parse_rec(filename):
         obj_struct['name'] = obj.find('name').text
         obj_struct['pose'] = obj.find('pose').text
         obj_struct['truncated'] = int(obj.find('truncated').text)
-        obj_struct['difficult'] = int(obj.find('difficult').text)
+        obj_struct['difficult'] = 0
         bbox = obj.find('bndbox')
         obj_struct['bbox'] = [int(bbox.find('xmin').text) - 1,
                               int(bbox.find('ymin').text) - 1,
@@ -437,7 +437,7 @@ if __name__ == '__main__':
     # load data
     dataset = CARDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CARAnnotationTransform(),
+                           target_transform=CARAnnotationTransform(keep_difficult=True),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
