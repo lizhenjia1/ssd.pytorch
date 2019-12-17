@@ -985,10 +985,10 @@ class SSDAugmentation(object):
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords(),
-            PhotometricDistort(),
-            Expand(self.mean),
-            RandomSampleCrop(),
-            RandomMirror(),
+            # PhotometricDistort(),
+            # Expand(self.mean),
+            # RandomSampleCrop(),
+            # RandomMirror(),
             ToPercentCoords(),
             Resize(self.size),
             SubtractMeans(self.mean)
@@ -1005,10 +1005,10 @@ class SSDAugmentation_offset(object):
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords_offset(),
-            PhotometricDistort(),
-            Expand(self.mean),
-            RandomSampleCrop_offset(),
-            RandomMirror_offset(),
+            # PhotometricDistort(),
+            # Expand(self.mean),
+            # RandomSampleCrop_offset(),
+            # RandomMirror_offset(),
             ToPercentCoords_offset(),
             Resize(self.size),
             SubtractMeans(self.mean)
@@ -1025,9 +1025,9 @@ class SSDAugmentation_four_corners(object):
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords_four_corners(),
-            PhotometricDistort(),
-            Expand_four_corners(self.mean),
-            RandomMirror_four_corners(),
+            # PhotometricDistort(),
+            # Expand_four_corners(self.mean),
+            # RandomMirror_four_corners(),
             ToPercentCoords_four_corners(),
             Resize(self.size),
             SubtractMeans(self.mean)
@@ -1044,10 +1044,10 @@ class SSDAugmentation_two_stage_end2end(object):
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords_two_stage_end2end(),
-            PhotometricDistort(),
+            # PhotometricDistort(),
             # Expand_two_stage_end2end(self.mean),
             # RandomSampleCrop_two_stage_end2end(),
-            RandomMirror_two_stage_end2end(),
+            # RandomMirror_two_stage_end2end(),
             ToPercentCoords_two_stage_end2end(),
             Resize(self.size),
             SubtractMeans(self.mean)
