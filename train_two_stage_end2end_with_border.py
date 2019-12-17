@@ -1,6 +1,6 @@
 from data import *
 from utils.augmentations import SSDAugmentation_two_stage_end2end
-from layers.modules import MultiBoxLoss_offset, MultiBoxLoss_four_corners
+from layers.modules import MultiBoxLoss_offset, MultiBoxLoss_four_corners_with_border
 from ssd_two_stage_end2end import build_ssd
 import os
 import sys
@@ -128,8 +128,8 @@ def train():
     #                        weight_decay=args.weight_decay)
     criterion = MultiBoxLoss_offset(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
-    criterion_2 = MultiBoxLoss_four_corners(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, args.cuda)
+    criterion_2 = MultiBoxLoss_four_corners_with_border(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
+                                          False, args.cuda)
 
     net.train()
     # loss counters
@@ -142,6 +142,7 @@ def train():
     loc_2_loss = 0
     conf_2_loss = 0
     four_corners_2_loss = 0
+    border_2_loss = 0
     epoch = 0
     print('Loading the dataset...')
 
@@ -155,7 +156,7 @@ def train():
     if args.visdom:
         vis_title = 'SSD.PyTorch on ' + dataset.name
         vis_legend = ['Loc Loss', 'Conf Loss', 'Size LP Loss', 'Offset Loss', 'Has LP Loss',
-                      'Loc2 loss', 'Conf2 Loss', 'Four Corners2 Loss', 'Total Loss']
+                      'Loc2 loss', 'Conf2 Loss', 'Four Corners2 Loss', 'Border2 Loss', 'Total Loss']
         iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
         epoch_plot = create_vis_plot('Epoch', 'Loss', vis_title, vis_legend)
 
@@ -170,7 +171,7 @@ def train():
         if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
             epoch += 1
             update_vis_plot(epoch, loc_loss, conf_loss, size_lp_loss, offset_loss, has_lp_loss, loc_2_loss, conf_2_loss,
-                            four_corners_2_loss, epoch_plot, None, 'append', epoch_size)
+                            four_corners_2_loss, border_2_loss, epoch_plot, None, 'append', epoch_size)
             # reset epoch loss counters
             loc_loss = 0
             conf_loss = 0
@@ -181,6 +182,7 @@ def train():
             loc_2_loss = 0
             conf_2_loss = 0
             four_corners_2_loss = 0
+            border_2_loss = 0
 
         if iteration in cfg['lr_steps']:
             step_index += 1
@@ -227,8 +229,8 @@ def train():
             targets_2_list = []
             for i in range(targets_2.shape[0]):
                 targets_2_list.append(targets_2[i, :].unsqueeze(0))
-            loss_l_2, loss_c_2, loss_four_corners_2 = criterion_2(out_2, targets_2_list)
-            loss_2 = loss_l_2 + loss_c_2 + loss_four_corners_2
+            loss_l_2, loss_c_2, loss_four_corners_2, loss_border_2 = criterion_2(out_2, targets_2_list)
+            loss_2 = loss_l_2 + loss_c_2 + loss_four_corners_2 + loss_border_2
             loss = loss_1 + loss_2
         else:
             loss = loss_1
@@ -245,6 +247,7 @@ def train():
             loc_2_loss += loss_l_2.item()
             conf_2_loss += loss_c_2.item()
             four_corners_2_loss += loss_four_corners_2.item()
+            border_2_loss += loss_border_2.item()
 
         if iteration % 10 == 0:
             log.l.info('''
@@ -255,12 +258,12 @@ def train():
             if targets_2.shape[0] > 0:
                 update_vis_plot(iteration, loss_l.item(), loss_c.item(), loss_size_lp.item(), loss_offset.item(),
                                 loss_has_lp.item(), loss_l_2.item(), loss_c_2.item(),
-                                loss_four_corners_2.item(), iter_plot, epoch_plot, 'append')
+                                loss_four_corners_2.item(), loss_border_2.item(), iter_plot, epoch_plot, 'append')
             else:
                 update_vis_plot(iteration, loss_l.item(), loss_c.item(), loss_size_lp.item(), loss_offset.item(),
-                                loss_has_lp.item(), 0, 0, 0, iter_plot, epoch_plot, 'append')
+                                loss_has_lp.item(), 0, 0, 0, 0, iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 100 == 0:
+        if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
@@ -296,7 +299,7 @@ def weights_init(m):
 def create_vis_plot(_xlabel, _ylabel, _title, _legend):
     return viz.line(
         X=torch.zeros((1,)).cpu(),
-        Y=torch.zeros((1, 9)).cpu(),
+        Y=torch.zeros((1, 10)).cpu(),
         opts=dict(
             xlabel=_xlabel,
             ylabel=_ylabel,
@@ -307,22 +310,23 @@ def create_vis_plot(_xlabel, _ylabel, _title, _legend):
 
 
 def update_vis_plot(iteration, loc, conf, size_lp, offset, has_lp, loc_2, conf_2, four_corners_2,
-                    window1, window2, update_type, epoch_size=1):
+                    border_2, window1, window2, update_type,
+                    epoch_size=1):
     viz.line(
-        X=torch.ones((1, 9)).cpu() * iteration,
+        X=torch.ones((1, 10)).cpu() * iteration,
         Y=torch.Tensor([loc, conf, size_lp, offset, has_lp,
-                        loc_2, conf_2, four_corners_2,
-                        loc + conf + size_lp + offset + has_lp + loc_2 + conf_2 + four_corners_2]).unsqueeze(0).cpu() / epoch_size,
+                        loc_2, conf_2, four_corners_2, border_2,
+                        loc + conf + size_lp + offset + has_lp + loc_2 + conf_2 + four_corners_2 + border_2]).unsqueeze(0).cpu() / epoch_size,
         win=window1,
         update=update_type
     )
     # initialize epoch plot on first iteration
     if iteration == 0:
         viz.line(
-            X=torch.zeros((1, 9)).cpu(),
+            X=torch.zeros((1, 10)).cpu(),
             Y=torch.Tensor([loc, conf, size_lp, offset, has_lp,
-                            loc_2, conf_2, four_corners_2,
-                            loc + conf + size_lp + offset + has_lp + loc_2 + conf_2 + four_corners_2]).unsqueeze(0).cpu(),
+                            loc_2, conf_2, four_corners_2, border_2,
+                            loc + conf + size_lp + offset + has_lp + loc_2 + conf_2 + four_corners_2 + border_2]).unsqueeze(0).cpu(),
             win=window2,
             update=True
         )
