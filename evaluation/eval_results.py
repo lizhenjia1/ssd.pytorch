@@ -22,6 +22,7 @@ import time
 import numpy as np
 import pickle
 import cv2
+from log import log
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -148,6 +149,8 @@ def do_python_eval(output_dir='output', use_07=True):
         print('AP for {} = {:.4f}'.format(cls, ap))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
             pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+        log.l.info('AP for {} = {:.4f}'.format(cls, ap))
+    log.l.info('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('~~~~~~~~')
     print('Results:')
