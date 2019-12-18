@@ -16,6 +16,7 @@ import numpy as np
 import argparse
 from torchsummary import summary
 from log import log
+from evaluation import eval_results
 
 
 def str2bool(v):
@@ -54,6 +55,15 @@ parser.add_argument('--visdom', default=False, type=str2bool,
 parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
 parser.add_argument('--input_size', default=300, type=int, help='SSD300 or SSD512')
+# ------------------------evaluation-------------------------------------------
+parser.add_argument('--top_k', default=200, type=int,
+                    help='Maximum number of predicted results')
+parser.add_argument('--confidence_threshold', default=0.01, type=float,
+                    help='Minimum threshold of preserved results')
+parser.add_argument('--eval_save_folder', default='eval/',
+                    help='File path to save results')
+parser.add_argument('--obj_type', default='car_carplate_offset', choices=['car_carplate_offset'],
+                    type=str, help='car_carplate_offset')
 args = parser.parse_args()
 
 
@@ -80,6 +90,11 @@ def train():
                                     transform=SSDAugmentation_offset(cfg['min_dim'],
                                                          MEANS),
                                     dataset_name='trainval')
+        from data import CAR_CARPLATE_OFFSET_CLASSES as labelmap
+        eval_dataset = CAR_CARPLATE_OFFSETDetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, MEANS),
+                           target_transform=CAR_CARPLATE_OFFSETAnnotationTransform(keep_difficult=True),
+                           dataset_name='test')
 
     if args.visdom:
         import visdom
@@ -217,8 +232,36 @@ def train():
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
+
+            # load net for evaluation
+            num_classes = len(labelmap) + 1  # +1 for background
+            eval_net = build_ssd('test', args.input_size, num_classes)  # initialize SSD
+            eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
+            eval_net.eval()
+            print('Finished loading model!')
+            if args.cuda:
+                eval_net = eval_net.cuda()
+                cudnn.benchmark = True
+            # evaluation begin
+            eval_results.test_net(args.eval_save_folder, args.obj_type, args.dataset_root, 'test',
+                    labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
+                    args.input_size, thresh=args.confidence_threshold)
+
     torch.save(ssd_net.state_dict(),
                'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth')
+    # load net for evaluation for the final model
+    num_classes = len(labelmap) + 1  # +1 for background
+    eval_net = build_ssd('test', args.input_size, num_classes)  # initialize SSD
+    eval_net.load_state_dict(torch.load('weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth'))
+    eval_net.eval()
+    print('Finished loading model!')
+    if args.cuda:
+        eval_net = eval_net.cuda()
+        cudnn.benchmark = True
+    # evaluation begin
+    eval_results.test_net(args.eval_save_folder, args.obj_type, args.dataset_root, 'test',
+            labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
+            args.input_size, thresh=args.confidence_threshold)
 
 
 def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):

@@ -380,11 +380,15 @@ def test_net(save_folder, obj_type, voc_root, set_type_, labelmap_, net, cuda, d
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):
             dets = detections[0, j, :]
-            mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
-            dets = torch.masked_select(dets, mask).view(-1, 5)
+            if obj_type in ['VOC', 'COCO', 'car', 'carplate', 'car_carplate']: 
+                mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+                dets = torch.masked_select(dets, mask).view(-1, 5)
+            elif obj_type == 'car_carplate_offset':
+                mask = dets[:, 0].gt(0.).expand(10, dets.size(0)).t()
+                dets = torch.masked_select(dets, mask).view(-1, 10)
             if dets.size(0) == 0:
                 continue
-            boxes = dets[:, 1:]
+            boxes = dets[:, 1:5]
             boxes[:, 0] *= w
             boxes[:, 2] *= w
             boxes[:, 1] *= h

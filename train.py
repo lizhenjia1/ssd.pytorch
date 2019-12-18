@@ -62,7 +62,7 @@ parser.add_argument('--confidence_threshold', default=0.01, type=float,
                     help='Minimum threshold of preserved results')
 parser.add_argument('--eval_save_folder', default='eval/',
                     help='File path to save results')
-parser.add_argument('--set_type', default='VOC', choices=['VOC', 'COCO', 'car_carplate', 'car', 'carplate'],
+parser.add_argument('--obj_type', default='VOC', choices=['VOC', 'COCO', 'car_carplate', 'car', 'carplate'],
                     type=str, help='VOC or COCO')
 args = parser.parse_args()
 
@@ -291,7 +291,7 @@ def train():
                 eval_net = eval_net.cuda()
                 cudnn.benchmark = True
             # evaluation begin
-            eval_results.test_net(args.eval_save_folder, args.set_type, args.dataset_root, 'test',
+            eval_results.test_net(args.eval_save_folder, args.obj_type, args.dataset_root, 'test',
                     labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
                     args.input_size, thresh=args.confidence_threshold)
 
@@ -307,7 +307,7 @@ def train():
         eval_net = eval_net.cuda()
         cudnn.benchmark = True
     # evaluation begin
-    eval_results.test_net(args.eval_save_folder, args.set_type, args.dataset_root, 'test',
+    eval_results.test_net(args.eval_save_folder, args.obj_type, args.dataset_root, 'test',
             labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
             args.input_size, thresh=args.confidence_threshold)
 
