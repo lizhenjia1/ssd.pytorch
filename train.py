@@ -240,10 +240,38 @@ def train():
             update_vis_plot(iteration, loss_l.item(), loss_c.item(),
                             iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 5000 == 0:
+        if iteration != 0 and iteration % 10 == 0:
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
+
+
+            from evaluation import eval_results
+            from data import CAR_CLASSES as labelmap
+            dataset_mean = (104, 117, 123)
+            set_type = 'trainval'
+            top_k = 200
+            confidence_threshold = 0.01
+            # load net
+            num_classes = len(labelmap) + 1                      # +1 for background
+            eval_net = build_ssd('test', args.input_size, num_classes)            # initialize SSD
+            eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
+            eval_net.eval()
+            print('Finished loading model!')
+            # load data
+            eval_dataset = CARDetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, dataset_mean),
+                           target_transform=CARAnnotationTransform(keep_difficult=True),
+                           dataset_name=set_type)
+            if args.cuda:
+                eval_net = eval_net.cuda()
+                cudnn.benchmark = True
+            # evaluation
+            eval_results.test_net('eval/', 'car', args.dataset_root, set_type, labelmap, eval_net,
+                    args.cuda, eval_dataset, BaseTransform(eval_net.size, dataset_mean), top_k,
+                    args.input_size, thresh=confidence_threshold)
+
+
     torch.save(ssd_net.state_dict(),
                'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth')
 

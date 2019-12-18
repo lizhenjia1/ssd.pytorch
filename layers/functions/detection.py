@@ -3,6 +3,8 @@ from torch.autograd import Function
 from ..box_utils import decode, decode_offset, decode_size, decode_four_corners, nms
 from data import voc as cfg
 
+import warnings
+warnings.filterwarnings('ignore')
 
 class Detect(Function):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
