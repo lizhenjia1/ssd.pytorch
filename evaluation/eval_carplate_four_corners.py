@@ -27,6 +27,36 @@ import numpy as np
 import pickle
 import cv2
 
+import shapely
+from shapely.geometry import Polygon, MultiPoint
+
+
+# 计算任意两个四边形的iou
+def polygon_iou(list1, list2):
+    """
+    Intersection over union between two shapely polygons.
+    """
+    polygon_points1 = np.array(list1).reshape(4, 2)
+    poly1 = Polygon(polygon_points1).convex_hull
+    polygon_points2 = np.array(list2).reshape(4, 2)
+    poly2 = Polygon(polygon_points2).convex_hull
+    union_poly = np.concatenate((polygon_points1,polygon_points2))
+    if not poly1.intersects(poly2): # this test is fast and can accelerate calculation
+        iou = 0
+    else:
+        try:
+            inter_area = poly1.intersection(poly2).area
+            #union_area = poly1.area + poly2.area - inter_area
+            union_area = MultiPoint(union_poly).convex_hull.area
+            if union_area == 0:
+                return 0
+            iou = float(inter_area) / union_area
+        except shapely.geos.TopologicalError:
+            print('shapely.geos.TopologicalError occured, iou set to 0')
+            iou = 0
+    return iou
+
+
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
 else:
