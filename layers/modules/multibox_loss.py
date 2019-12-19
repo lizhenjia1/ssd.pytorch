@@ -6,6 +6,7 @@ from torch.autograd import Variable
 from data import voc as cfg
 from ..box_utils import match, match_offset, match_four_corners, log_sum_exp
 from ..box_utils import decode, decode_four_corners
+from ..functions.detection import Detect_four_corners
 
 
 class MultiBoxLoss(nn.Module):
@@ -389,6 +390,9 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
         self.variance = cfg['variance']
+        # for border loss
+        self.softmax = nn.Softmax(dim=-1)
+        self.detect = Detect_four_corners(num_classes, 0, 200, 0.01, 0.45)
 
     def forward(self, predictions, targets):
         """Multibox Loss
@@ -451,9 +455,21 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
 
         # Border Loss (Smooth L1), only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
-        priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx].view(-1, 4)
-        decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
-        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+        # priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx].view(-1, 4)
+        # decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
+        # decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+
+        # Border Loss (Smooth L1), only for positive prior after nms and 0.6 threshold,
+        # and select the one with largetst confidence
+        # 跟demo中一样只保留最后用于展示的prediction做loss,这样减少了很多无关anchor带来的干扰
+        output = self.detect(loc_data, self.softmax(conf_data), priors, four_corners_data)
+        detections = output.data
+        display_idx = detections[:, 1, 0, 0] > 0.6
+        detections = detections[:, 1, 0, :]
+        display_pos = display_idx.unsqueeze(1).expand_as(detections)
+        final_detections = detections[display_pos].view(-1, 13)
+        decoded_boxes = final_detections[:, 1:5]
+        decoded_four_points = final_detections[:, 5:]
 
         # 4 border losses
         loss_border_left = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 0] - torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6])) / self.variance[0] / self.variance[1],
@@ -470,6 +486,7 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
                                               size_average=False)
 
         loss_border = loss_border_left + loss_border_top + loss_border_right + loss_border_bottom
+        loss_border = loss_border * 10.0
 
         # Compute max conf across batch for hard negative mining
         batch_conf = conf_data.view(-1, self.num_classes)
