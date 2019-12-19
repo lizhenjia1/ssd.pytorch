@@ -13,11 +13,11 @@ from torch.autograd import Variable
 import sys
 sys.path.append(".")
 
-from data import CARDetection, CARAnnotationTransform, CAR_ROOT, BaseTransform
-from data import CAR_CLASSES as labelmap
+from data import CARPLATE_FOUR_CORNERSDetection, CARPLATE_FOUR_CORNERSAnnotationTransform, CARPLATE_FOUR_CORNERS_ROOT, BaseTransform
+from data import CARPLATE_FOUR_CORNERS_CLASSES as labelmap
 import torch.utils.data as data
 
-from ssd import build_ssd
+from ssd_four_corners import build_ssd
 
 import sys
 import os
@@ -50,7 +50,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=CAR_ROOT,
+parser.add_argument('--voc_root', default=CARPLATE_FOUR_CORNERS_ROOT,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -78,7 +78,7 @@ imgsetpath = os.path.join(args.voc_root, 'ImageSets',
                           'Main', '{:s}.txt')
 devkit_path = args.voc_root
 dataset_mean = (104, 117, 123)
-set_type = 'test'
+set_type = 'trainval'
 
 
 class Timer(object):
@@ -377,7 +377,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_car', set_type)
+    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_carplate_four_corners', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     total_time = 0
@@ -394,11 +394,11 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):
             dets = detections[0, j, :]
-            mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
-            dets = torch.masked_select(dets, mask).view(-1, 5)
+            mask = dets[:, 0].gt(0.).expand(13, dets.size(0)).t()
+            dets = torch.masked_select(dets, mask).view(-1, 13)
             if dets.size(0) == 0:
                 continue
-            boxes = dets[:, 1:]
+            boxes = dets[:, 1:5]
             boxes[:, 0] *= w
             boxes[:, 2] *= w
             boxes[:, 1] *= h
@@ -435,9 +435,9 @@ if __name__ == '__main__':
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = CARDetection(root=args.voc_root,
+    dataset = CARPLATE_FOUR_CORNERSDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CARAnnotationTransform(keep_difficult=True),
+                           target_transform=CARPLATE_FOUR_CORNERSAnnotationTransform(keep_difficult=True),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
