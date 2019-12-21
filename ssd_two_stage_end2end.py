@@ -346,40 +346,14 @@ class SSD_two_stage_end2end(nn.Module):
         elif self.phase == 'test':
             has_lp_th = 0.5
             th = 0.6
-            # rpn_rois转rois_squeeze,取置信度大于阈值的车辆区域
-            # 这里只考虑车的confidence
-            rois_idx = rpn_rois[0, 1, :, 0] > th
-            matches_vehicle = rpn_rois[0, 1, rois_idx, :]
-
-            # 没有车辆直接return空
-            if matches_vehicle.shape[0] == 0:
-                results_1 = torch.empty(0)
-                results_2 = torch.empty(0)
-                output_1 = torch.empty(0)
-                output_1_idx = torch.empty(0)
-
-                output = (results_1,
-                          results_2,
-                          output_1,
-                          output_1_idx)
-                return output
+            # 包括车和车牌的检测结果
+            output = torch.zeros(1, 3, 200, 13)
+            # 存储车的检测结果
+            output[0, 1, :, :5] = rpn_rois[0, 1, :, :5]
 
             # 这里把是否有车牌也考虑进来,有车并且有车牌的才去检测车牌
-            rois_idx_lp = (rpn_rois[0, 1, :, 0] > th) & (rpn_rois[0, 1, :, 5] > has_lp_th)
-            matches = rpn_rois[0, 1, rois_idx_lp, :]
-
-            # 没有车辆或者车内没有车牌直接return
-            if matches.shape[0] == 0:
-                results_1 = rpn_rois[:, :, rois_idx, :]
-                results_2 = torch.empty(0)
-                output_1 = rpn_rois
-                output_1_idx = rois_idx
-
-                output = (results_1,
-                          results_2,
-                          output_1,
-                          output_1_idx)
-                return output
+            rois_idx = (rpn_rois[0, 1, :, 0] > th) & (rpn_rois[0, 1, :, 5] > has_lp_th)
+            matches = rpn_rois[0, 1, rois_idx, :]
 
             # 针对matches中offset,size以及扩大倍数在车内扩大
             car_center = (matches[:, [1, 2]] + matches[:, [3, 4]]) / 2
@@ -449,10 +423,6 @@ class SSD_two_stage_end2end(nn.Module):
             conf_2 = torch.cat([o.view(o.size(0), -1) for o in conf_2], 1)
             four_corners_2 = torch.cat([o.view(o.size(0), -1) for o in four_corners_2], 1)
 
-            results_1 = rpn_rois[:, :, rois_idx, :]
-            output_1 = rpn_rois
-            output_1_idx = rois_idx
-
             output_2 = self.detect_2(
                 loc_2.view(loc_2.size(0), -1, 4),
                 self.softmax_2(conf_2.view(conf_2.size(0), -1,
@@ -480,6 +450,7 @@ class SSD_two_stage_end2end(nn.Module):
             # # (1, 2, 200, 13)
             # results_2 = output_2_pos_squeeze_sorted[:200, :].unsqueeze(0).unsqueeze(1).repeat(1, 2, 1, 1)
 
+            # 这种方法是每辆车里面只选conf最大的车牌
             # (num_car, 13)
             output_2_pos = output_2[:, 1, 0, :]
             # (num_car, 2)
@@ -491,13 +462,12 @@ class SSD_two_stage_end2end(nn.Module):
             rois_top_left_expand = rois_top_left.repeat(1, 6)
             # (num_car, 12)
             output_2_pos[:, 1:] = output_2_pos[:, 1:] * rois_size_expand + rois_top_left_expand
-            # (1, 2, num_car, 13)
-            results_2 = output_2_pos.unsqueeze(0).unsqueeze(1).repeat(1, 2, 1, 1)
 
-            output = (results_1,
-                      results_2,
-                      output_1,
-                      output_1_idx)
+            # 存储车牌的检测结果
+            num_car = output_2_pos.shape[0]
+            output[0, 2, :num_car, :] = output_2_pos
+
+            return output
         else:
             print("ERROR: Phase: " + self.phase + " not recognized")
             return

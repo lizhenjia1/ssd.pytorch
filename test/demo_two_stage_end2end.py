@@ -45,13 +45,9 @@ for img_id in range(40):
 
     # 给空的targets,车辆检测结果作为targets
     # 在内部forward的过程中已经进行了阈值过滤,跟后续展示代码相同
-    r1, r2, o1, o1_idx = net(xx, [])
+    detections = net(xx, [])
 
-    # 没有车辆检测结果,直接下一张图片
-    # if o1_idx.shape == torch.Size([0]):
-    #     continue
-
-    from data import CAR_CARPLATE_TWO_STAGE_END2END_CLASSES as labels
+    from data import CAR_CARPLATE_CLASSES as labels
 
     fig = plt.figure(figsize=(10, 10))
     colors = plt.cm.hsv(np.linspace(0, 1, 21)).tolist()
@@ -60,7 +56,7 @@ for img_id in range(40):
 
     # [num, num_classes, num_car, 10]
     # 10: score(1) bbox(4) has_lp(1) size_lp(2) offset(2)
-    detections = r1.data
+    detections = detections.data
     # scale each detection back up to the image
     scale = torch.Tensor(rgb_image.shape[1::-1]).repeat(2)
     scale_4 = torch.Tensor(rgb_image.shape[1::-1]).repeat(4)
@@ -79,25 +75,15 @@ for img_id in range(40):
                 color = colors[i]
                 currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
                 currentAxis.text(pt[0], pt[1], display_txt, bbox={'facecolor':color, 'alpha':0.5})
-
-    # 第二个网络检测结果
-    detections_2 = r2.data
-
-    for i in range(detections_2.size(1)):
-        # skip background
-        if i == 0:
-            continue
-        th = 0.6
-        for j in range(detections_2.size(2)):
-            if detections_2[0, i, j, 0] > th:
-                lp_pt = (detections_2[0, i, j, 1:5]*scale).cpu().numpy()
-                lp_coords = (lp_pt[0], lp_pt[1]), lp_pt[2] - lp_pt[0] + 1, lp_pt[3] - lp_pt[1] + 1
-                currentAxis.add_patch(plt.Rectangle(*lp_coords, fill=False, edgecolor=colors[1], linewidth=2))
-                four_corners = (detections_2[0, i, j, 5:]*scale_4).cpu().numpy()
-                corners_x = np.append(four_corners[0::2], four_corners[0])
-                corners_y = np.append(four_corners[1::2], four_corners[1])
-                currentAxis.plot(corners_x, corners_y, linewidth=1)
-
+                
+                if i == 2:
+                    lp_pt = (detections[0, i, j, 1:5]*scale).cpu().numpy()
+                    lp_coords = (lp_pt[0], lp_pt[1]), lp_pt[2] - lp_pt[0] + 1, lp_pt[3] - lp_pt[1] + 1
+                    currentAxis.add_patch(plt.Rectangle(*lp_coords, fill=False, edgecolor=colors[1], linewidth=2))
+                    four_corners = (detections[0, i, j, 5:]*scale_4).cpu().numpy()
+                    corners_x = np.append(four_corners[0::2], four_corners[0])
+                    corners_y = np.append(four_corners[1::2], four_corners[1])
+                    currentAxis.plot(corners_x, corners_y, linewidth=1)
     plt.show()
 
 
