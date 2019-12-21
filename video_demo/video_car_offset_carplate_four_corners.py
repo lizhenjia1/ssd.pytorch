@@ -210,7 +210,7 @@ def video_run(dir_name):
                 if i == 0:
                     continue
                 j = 0
-                th = 0.5
+                th = 0.6
                 while detections[0, i, j, 0] > th:
                     score = detections[0, i, j, 0]
                     label_name = labels[i - 1]
