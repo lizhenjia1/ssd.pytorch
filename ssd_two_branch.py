@@ -124,17 +124,19 @@ class SSD_two_branch(nn.Module):
         carplate_conf = torch.cat([o.view(o.size(0), -1) for o in carplate_conf], 1)
 
         if self.phase == "test":
-            output = self.detect(
+            output1 = self.detect(
                 car_loc.view(car_loc.size(0), -1, 4),           # loc preds
                 self.softmax(car_conf.view(car_conf.size(0), -1,
                              self.num_classes)),                # conf preds
                 self.car_priors.type(type(x.data)),             # default boxes
-                
+            )
+            output2 = self.detect(
                 carplate_loc.view(carplate_loc.size(0), -1, 4), # loc preds
                 self.softmax(carplate_conf.view(carplate_conf.size(0), -1,
                                            self.num_classes)),  # conf preds
                 self.carplate_priors.type(type(x.data))         # default boxes
             )
+            output = torch.cat((output1, output2[:,1,:,:].unsqueeze(1)), 1)
         else:
             output = (
                 car_loc.view(car_loc.size(0), -1, 4),

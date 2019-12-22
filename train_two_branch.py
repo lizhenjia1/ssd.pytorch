@@ -237,7 +237,7 @@ def train():
             update_vis_plot(iteration, car_loss_l.item(), car_loss_c.item(), carplate_loss_l.item(), carplate_loss_c.item(),
                             iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 100 == 0:
+        if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
