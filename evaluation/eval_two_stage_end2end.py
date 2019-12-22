@@ -80,7 +80,7 @@ imgsetpath = os.path.join(args.voc_root, 'ImageSets',
                           'Main', '{:s}.txt')
 devkit_path = args.voc_root
 dataset_mean = (104, 117, 123)
-set_type = 'trainval'
+set_type = 'test'
 
 
 class Timer(object):
