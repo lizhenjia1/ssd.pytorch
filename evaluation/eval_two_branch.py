@@ -13,11 +13,11 @@ from torch.autograd import Variable
 import sys
 sys.path.append(".")
 
-from data import CARPLATE_FOUR_CORNERSDetection, CARPLATE_FOUR_CORNERSAnnotationTransform, CARPLATE_FOUR_CORNERS_ROOT, BaseTransform
-from data import CARPLATE_FOUR_CORNERS_CLASSES as labelmap
+from data import CAR_CARPLATEDetection, CAR_CARPLATEAnnotationTransform, CAR_CARPLATE_ROOT, BaseTransform
+from data import CAR_CARPLATE_CLASSES as labelmap
 import torch.utils.data as data
 
-from ssd_four_corners import build_ssd
+from ssd_two_branch import build_ssd
 
 import sys
 import os
@@ -26,36 +26,6 @@ import argparse
 import numpy as np
 import pickle
 import cv2
-
-import shapely
-from shapely.geometry import Polygon, MultiPoint
-
-
-# 计算任意两个四边形的iou
-def polygon_iou(list1, list2):
-    """
-    Intersection over union between two shapely polygons.
-    """
-    polygon_points1 = np.array(list1).reshape(4, 2)
-    poly1 = Polygon(polygon_points1).convex_hull
-    polygon_points2 = np.array(list2).reshape(4, 2)
-    poly2 = Polygon(polygon_points2).convex_hull
-    union_poly = np.concatenate((polygon_points1,polygon_points2))
-    if not poly1.intersects(poly2): # this test is fast and can accelerate calculation
-        iou = 0
-    else:
-        try:
-            inter_area = poly1.intersection(poly2).area
-            #union_area = poly1.area + poly2.area - inter_area
-            union_area = MultiPoint(union_poly).convex_hull.area
-            if union_area == 0:
-                return 0
-            iou = float(inter_area) / union_area
-        except shapely.geos.TopologicalError:
-            print('shapely.geos.TopologicalError occured, iou set to 0')
-            iou = 0
-    return iou
-
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -80,7 +50,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=CARPLATE_FOUR_CORNERS_ROOT,
+parser.add_argument('--voc_root', default=CAR_CARPLATE_ROOT,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -407,7 +377,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_carplate_four_corners', set_type)
+    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_two_branch', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     total_time = 0
@@ -424,11 +394,11 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):
             dets = detections[0, j, :]
-            mask = dets[:, 0].gt(0.).expand(13, dets.size(0)).t()
-            dets = torch.masked_select(dets, mask).view(-1, 13)
+            mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+            dets = torch.masked_select(dets, mask).view(-1, 5)
             if dets.size(0) == 0:
                 continue
-            boxes = dets[:, 1:5]
+            boxes = dets[:, 1:]
             boxes[:, 0] *= w
             boxes[:, 2] *= w
             boxes[:, 1] *= h
@@ -459,15 +429,14 @@ def evaluate_detections(box_list, output_dir, dataset):
 
 if __name__ == '__main__':
     # load net
-    num_classes = len(labelmap) + 1                      # +1 for background
-    net = build_ssd('test', args.input_size, num_classes)            # initialize SSD
+    net = build_ssd('test', args.input_size, 2)            # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = CARPLATE_FOUR_CORNERSDetection(root=args.voc_root,
+    dataset = CAR_CARPLATEDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CARPLATE_FOUR_CORNERSAnnotationTransform(keep_difficult=True),
+                           target_transform=CAR_CARPLATEAnnotationTransform(keep_difficult=True),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
