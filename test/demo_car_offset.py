@@ -26,8 +26,8 @@ net.load_weights(args.trained_model)
 from matplotlib import pyplot as plt
 from data import CAR_CARPLATE_OFFSETDetection, CAR_CARPLATE_OFFSETAnnotationTransform, CAR_CARPLATE_OFFSET_ROOT
 testset = CAR_CARPLATE_OFFSETDetection(CAR_CARPLATE_OFFSET_ROOT, None, None, CAR_CARPLATE_OFFSETAnnotationTransform(),
-                                       dataset_name='trainval')
-for img_id in range(80):
+                                       dataset_name='test')
+for img_id in range(100):
     image = testset.pull_image(img_id)
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 

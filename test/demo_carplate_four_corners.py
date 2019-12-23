@@ -26,8 +26,8 @@ net.load_weights(args.trained_model)
 from matplotlib import pyplot as plt
 from data import CARPLATE_FOUR_CORNERSDetection, CARPLATE_FOUR_CORNERSAnnotationTransform, CARPLATE_FOUR_CORNERS_ROOT
 testset = CARPLATE_FOUR_CORNERSDetection(CARPLATE_FOUR_CORNERS_ROOT, None, None, CARPLATE_FOUR_CORNERSAnnotationTransform(),
-                                         dataset_name='trainval')
-for img_id in range(45):
+                                         dataset_name='test')
+for img_id in range(100):
     image = testset.pull_image(img_id)
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -62,7 +62,7 @@ for img_id in range(45):
         if i == 0:
             continue
         j = 0
-        th = 0.7
+        th = 0.6
         while detections[0, i, j, 0] > th:
             score = detections[0, i, j, 0]
             label_name = labels[i-1]

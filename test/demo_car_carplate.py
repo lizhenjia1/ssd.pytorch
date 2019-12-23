@@ -31,8 +31,8 @@ net.load_weights(args.trained_model)
 from matplotlib import pyplot as plt
 from data import CAR_CARPLATEDetection, CAR_CARPLATEAnnotationTransform, CAR_CARPLATE_ROOT
 testset = CAR_CARPLATEDetection(CAR_CARPLATE_ROOT, None, None, CAR_CARPLATEAnnotationTransform(),
-                                       dataset_name='trainval')
-for img_id in range(80):
+                                       dataset_name='test')
+for img_id in range(100):
     image = testset.pull_image(img_id)
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 

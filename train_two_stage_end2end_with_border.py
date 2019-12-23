@@ -26,8 +26,8 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='TWO_STAGE_END2END', choices=['TWO_STAGE_END2END'],
-                    type=str, help='TWO_STAGE_END2END')
+parser.add_argument('--dataset', default='TWO_STAGE_END2END_WITH_BORDER', choices=['TWO_STAGE_END2END_WITH_BORDER'],
+                    type=str, help='TWO_STAGE_END2END_WITH_BORDER')
 parser.add_argument('--dataset_root', default=VOC_ROOT,
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
@@ -84,7 +84,7 @@ if not os.path.exists('weights/' + args.save_folder):
 
 
 def train():
-    if args.dataset == 'TWO_STAGE_END2END':
+    if args.dataset == 'TWO_STAGE_END2END_WITH_BORDER':
         cfg = two_stage_end2end
         if args.input_size == 512:
             cfg = change_cfg_for_ssd512(cfg)
