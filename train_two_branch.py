@@ -131,13 +131,12 @@ def train():
         ssd_net.carplate_loc.apply(weights_init)
         ssd_net.carplate_conf.apply(weights_init)
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay)
-    # optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999),
-    #                        weight_decay=args.weight_decay)
+    # optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+    #                       weight_decay=args.weight_decay)
+    optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999),
+                           weight_decay=args.weight_decay)
     car_criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
-
     carplate_criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                                  False, args.cuda)
 
