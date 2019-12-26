@@ -471,6 +471,8 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         decoded_boxes = final_detections[:, 1:5]
         decoded_four_points = final_detections[:, 5:]
 
+        M = final_detections.shape[0]
+
         # 4 border losses
         loss_border_left = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 0] - torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6])) / self.variance[0] / self.variance[1],
                                             torch.zeros(decoded_boxes.shape[0]),
@@ -486,7 +488,6 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
                                               size_average=False)
 
         loss_border = loss_border_left + loss_border_top + loss_border_right + loss_border_bottom
-        loss_border = loss_border * 10.0
 
         # Compute max conf across batch for hard negative mining
         batch_conf = conf_data.view(-1, self.num_classes)
@@ -521,5 +522,8 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         loss_l /= N
         loss_c /= N
         loss_four_corners /= N
-        loss_border /= N
+        if M == 0:
+            loss_border = torch.zeros(1)
+        elif M > 0:
+            loss_border /= M
         return loss_l, loss_c, loss_four_corners, loss_border
