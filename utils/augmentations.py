@@ -1044,10 +1044,10 @@ class SSDAugmentation_two_stage_end2end(object):
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords_two_stage_end2end(),
-            # PhotometricDistort(),
-            # Expand_two_stage_end2end(self.mean),
-            # RandomSampleCrop_two_stage_end2end(),
-            # RandomMirror_two_stage_end2end(),
+            PhotometricDistort(),
+            Expand_two_stage_end2end(self.mean),
+            RandomSampleCrop_two_stage_end2end(),
+            RandomMirror_two_stage_end2end(),
             ToPercentCoords_two_stage_end2end(),
             Resize(self.size),
             SubtractMeans(self.mean)
