@@ -51,8 +51,8 @@ coco = {
 
 car_carplate = {
     'num_classes': 3,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -66,8 +66,8 @@ car_carplate = {
 
 car = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -81,8 +81,8 @@ car = {
 
 carplate = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -96,8 +96,8 @@ carplate = {
 
 car_branch = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -111,8 +111,8 @@ car_branch = {
 
 carplate_branch = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -126,8 +126,8 @@ carplate_branch = {
 
 car_carplate_offset = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -141,8 +141,8 @@ car_carplate_offset = {
 
 carplate_four_corners = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],
@@ -156,21 +156,21 @@ carplate_four_corners = {
 
 two_stage_end2end = {
     'num_classes': 2,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
+    'lr_steps': (40000, 60000, 80000),
+    'max_iter': 80000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
-    'feature_maps_2': [28, 28, 28],
+    'feature_maps_2': [56, 28, 14],
     'min_dim': 300,
-    'min_dim_2': 28,
+    'min_dim_2': 56,
     'expand_num': 3,
     'steps': [8, 16, 32, 64, 100, 300],
-    'steps_2': [1, 1, 1],
+    'steps_2': [1, 2, 4],
     'min_sizes': [30.0, 60.0, 111.0, 162.0, 213.0, 264.0],
     'max_sizes': [60.0, 111.0, 162.0, 213.0, 264.0, 315.0],
-    'min_sizes_2': [5.0, 10.0, 45.0],
-    'max_sizes_2': [10.0, 45.0, 80.0],
+    'min_sizes_2': [5.6, 11.2, 50.4],
+    'max_sizes_2': [11.2, 50.4, 89.6],
     'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
-    'aspect_ratios_2': [[2], [2, 3], [2, 3]],
+    'aspect_ratios_2': [[2, 3], [2, 3], [2, 3]],
     'variance': [0.1, 0.2],
     'clip': True,
     'name': 'TWO_STAGE_END2END',

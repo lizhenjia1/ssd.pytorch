@@ -14,7 +14,7 @@ import argparse
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Testing With Pytorch')
 parser.add_argument('--input_size', default=300, type=int, help='SSD300 or SSD512')
-parser.add_argument('--input_size_2', default=28, type=int, help='input size of the second network')
+parser.add_argument('--input_size_2', default=56, type=int, help='input size of the second network')
 parser.add_argument('--expand_num', default=3, type=int, help='expand ratio around the license plate')
 parser.add_argument('--trained_model',
                     default='weights/voc_weights/VOC300.pth', type=str,

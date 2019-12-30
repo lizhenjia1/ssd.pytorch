@@ -52,3 +52,27 @@ max_sizes = [min_dim * 15 / 100.] + max_sizes
 print("500*500")
 print(min_sizes)
 print(max_sizes)
+
+
+# parameters for generating priors.
+# minimum dimension of input image
+min_dim = 56
+# 1_1 ==> 56 x 56
+# 1_2 ==> 28 x 28
+# 1_3 ==> 14 x 14
+mbox_source_layers = ['1_1', '1_2', '1_3']
+# in percent %
+min_ratio = 20
+max_ratio = 90
+step = int(math.floor((max_ratio - min_ratio) / (len(mbox_source_layers) - 2)))
+min_sizes = []
+max_sizes = []
+for ratio in range(min_ratio, max_ratio + 1, step):
+  min_sizes.append(min_dim * ratio / 100.)
+  max_sizes.append(min_dim * (ratio + step) / 100.)
+min_sizes = [min_dim * 10 / 100.] + min_sizes
+max_sizes = [min_dim * 20 / 100.] + max_sizes
+
+print("56*56")
+print(min_sizes)
+print(max_sizes)

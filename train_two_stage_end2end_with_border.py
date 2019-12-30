@@ -105,6 +105,7 @@ def train():
         viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['min_dim_2'], cfg['num_classes'], cfg['expand_num'])
+    print(ssd_net)
     net = ssd_net
 
     # summary
