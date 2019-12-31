@@ -353,6 +353,8 @@ class SSD_two_stage_end2end(nn.Module):
             # 这里把是否有车牌也考虑进来,有车并且有车牌的才去检测车牌
             rois_idx = (rpn_rois[0, 1, :, 0] > th) & (rpn_rois[0, 1, :, 5] > has_lp_th)
             matches = rpn_rois[0, 1, rois_idx, :]
+            if matches.shape[0] == 0:
+                return output
 
             # 针对matches中offset,size以及扩大倍数在车内扩大
             car_center = (matches[:, [1, 2]] + matches[:, [3, 4]]) / 2
