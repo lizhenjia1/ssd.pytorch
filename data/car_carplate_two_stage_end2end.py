@@ -14,7 +14,7 @@ CAR_CARPLATE_TWO_STAGE_END2END_CLASSES = (  # always index 0
     'car', )
 
 # note: if you used our download scripts, this should be right
-CAR_CARPLATE_TWO_STAGE_END2END_ROOT = osp.join('/data', 'VALID/720p/car_carplate_two_stage_end2end/VOC/')
+CAR_CARPLATE_TWO_STAGE_END2END_ROOT = osp.join('/data', 'TILT/720p/car_carplate_two_stage_end2end/')
 
 
 class CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform(object):
