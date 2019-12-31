@@ -14,7 +14,7 @@ CAR_CARPLATE_OFFSET_CLASSES = (  # always index 0
     'car', )
 
 # note: if you used our download scripts, this should be right
-CAR_CARPLATE_OFFSET_ROOT = osp.join('/data', 'VALID/720p/car_carplate_offset/VOC/')
+CAR_CARPLATE_OFFSET_ROOT = osp.join('/data', 'TILT/720p/car_carplate_offset/')
 
 
 class CAR_CARPLATE_OFFSETAnnotationTransform(object):
