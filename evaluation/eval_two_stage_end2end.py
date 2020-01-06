@@ -376,13 +376,12 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
     #    (x1, y1, x2, y2, score)
     all_boxes = [[[] for _ in range(num_images)]
                  for _ in range(len(labelmap)+1)]
+    all_expand_boxes = []
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
     output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_two_stage_end2end', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
-
-    total_time = 0
 
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
@@ -411,17 +410,73 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
                                                                  copy=False)
             all_boxes[j][i] = cls_dets
 
+        # 将expand region转换为ndarray
+        dets = detections[0, 1, :]
+        mask = dets[:, 9].gt(0.).expand(13, dets.size(0)).t()
+        dets = torch.masked_select(dets, mask).view(-1, 13)
+        if dets.size(0) == 0:
+            continue
+        boxes = dets[:, 5:9]
+        boxes[:, 0] *= w
+        boxes[:, 2] *= w
+        boxes[:, 1] *= h
+        boxes[:, 3] *= h
+        cls_dets = boxes.cpu().numpy().astype(np.float32, copy=False)
+        all_expand_boxes.append(cls_dets)
+
         print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
                                                     num_images, detect_time))
-        total_time += detect_time
-    print("average time:")
-    print(total_time / num_images * 1000)
 
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
     evaluate_detections(all_boxes, output_dir, dataset)
+    evaluate_expand_recall(all_expand_boxes)
+
+
+def bbox_in_expand_region(gt_bbox, all_expand_boxes):
+    in_expand = False
+    for i in range(all_expand_boxes.shape[0]):
+        expand_box = all_expand_boxes[i, :]
+        if gt_bbox[0] >= expand_box[0] and gt_bbox[1] >= expand_box[1] \
+            and gt_bbox[2] <= expand_box[2] and gt_bbox[3] <= expand_box[3]:
+            in_expand = True
+    return in_expand
+
+
+def evaluate_expand_recall(all_expand_boxes):
+    cachedir = os.path.join(devkit_path, 'annotations_cache')
+    imagesetfile = imgsetpath.format(set_type)
+    # first load gt
+    if not os.path.isdir(cachedir):
+        os.mkdir(cachedir)
+    cachefile = os.path.join(cachedir, 'annots.pkl')
+    # read list of images
+    with open(imagesetfile, 'r') as f:
+        lines = f.readlines()
+    imagenames = [x.strip() for x in lines]
+    # load
+    with open(cachefile, 'rb') as f:
+        recs = pickle.load(f)
+
+    # extract gt objects for this class
+    npos = 0
+    nrecall = 0
+    for idx, imagename in enumerate(imagenames):
+        R = [obj for obj in recs[imagename] if obj['name'] == 'carplate']
+        bbox = np.array([x['bbox'] for x in R]).astype(np.float32, copy=False)
+        difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
+        det = [False] * len(R)
+        npos = npos + sum(~difficult)
+
+        for i in range(bbox.shape[0]):
+            gt_bbox = bbox[i, :]
+            if bbox_in_expand_region(gt_bbox, all_expand_boxes[idx]):
+                nrecall += 1
+
+    print("expand region recall")
+    print("{}/{}: {:.4f}".format(nrecall, npos, nrecall/npos))
 
 
 def evaluate_detections(box_list, output_dir, dataset):

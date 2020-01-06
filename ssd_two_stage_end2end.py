@@ -467,6 +467,10 @@ class SSD_two_stage_end2end(nn.Module):
             num_car = output_2_pos.shape[0]
             output[0, 2, :num_car, :] = output_2_pos
 
+            # 存储expand区域的结果,放在车后面,并设置flag
+            output[0, 1, :num_car, 5:9] = lp_bbox
+            output[0, 1, :num_car, 9] = 1
+
             return output
         else:
             print("ERROR: Phase: " + self.phase + " not recognized")
