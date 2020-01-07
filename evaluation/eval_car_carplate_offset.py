@@ -13,8 +13,8 @@ from torch.autograd import Variable
 import sys
 sys.path.append(".")
 
-from data import CAR_CARPLATE_OFFSETDetection, CAR_CARPLATE_OFFSETAnnotationTransform, CAR_CARPLATE_OFFSET_ROOT, BaseTransform
-from data import CAR_CARPLATE_OFFSET_CLASSES as labelmap
+from data import CAR_CARPLATEDetection, CAR_CARPLATEAnnotationTransform, CAR_CARPLATE_ROOT, BaseTransform
+from data import CAR_CARPLATE_CLASSES as labelmap
 import torch.utils.data as data
 
 from ssd_offset import build_ssd
@@ -50,7 +50,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=CAR_CARPLATE_OFFSET_ROOT,
+parser.add_argument('--voc_root', default=CAR_CARPLATE_ROOT,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -380,8 +380,6 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
     output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_car_carplate_offset', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
-    total_time = 0
-
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
         x = Variable(im.unsqueeze(0))
@@ -392,28 +390,60 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         detect_time = _t['im_detect'].toc(average=False)
 
         # skip j = 0, because it's the background class
-        for j in range(1, detections.size(1)):
-            dets = detections[0, j, :]
-            mask = dets[:, 0].gt(0.).expand(10, dets.size(0)).t()
-            dets = torch.masked_select(dets, mask).view(-1, 10)
-            if dets.size(0) == 0:
-                continue
-            boxes = dets[:, 1:5]
-            boxes[:, 0] *= w
-            boxes[:, 2] *= w
-            boxes[:, 1] *= h
-            boxes[:, 3] *= h
-            scores = dets[:, 0].cpu().numpy()
-            cls_dets = np.hstack((boxes.cpu().numpy(),
-                                  scores[:, np.newaxis])).astype(np.float32,
-                                                                 copy=False)
-            all_boxes[j][i] = cls_dets
+        for j in range(1, detections.size(1) + 1):
+            dets = detections[0, 1, :]
+            if j == 1:
+                mask = dets[:, 0].gt(0.).expand(10, dets.size(0)).t()
+                dets = torch.masked_select(dets, mask).view(-1, 10)
+                if dets.size(0) == 0:
+                    continue
+                boxes = dets[:, 1:5]
+                boxes[:, 0] *= w
+                boxes[:, 2] *= w
+                boxes[:, 1] *= h
+                boxes[:, 3] *= h
+                scores = dets[:, 0].cpu().numpy()
+                cls_dets = np.hstack((boxes.cpu().numpy(),
+                                    scores[:, np.newaxis])).astype(np.float32,
+                                                                    copy=False)
+
+                all_boxes[j][i] = cls_dets
+            if j == 2:
+                has_lp_th = 0.5
+                th = 0.6
+                mask = (dets[:, 0].gt(th) & dets[:, 5].gt(has_lp_th)).expand(10, dets.size(0)).t()
+                dets = torch.masked_select(dets, mask).view(-1, 10)
+                if dets.size(0) == 0:
+                    continue
+                boxes = dets[:, 1:5]
+                boxes[:, 0] *= w
+                boxes[:, 2] *= w
+                boxes[:, 1] *= h
+                boxes[:, 3] *= h
+                scores = dets[:, 0].cpu().numpy()
+                cls_dets = np.hstack((boxes.cpu().numpy(),
+                                    scores[:, np.newaxis])).astype(np.float32,
+                                                                    copy=False)
+                has_lp = dets[:, 5]
+                size_lp = dets[:, 6:8]
+                size_lp[:, 0] *= w
+                size_lp[:, 1] *= h
+                offset = dets[:, 8:10]
+                offset[:, 0] *= w
+                offset[:, 1] *= h
+
+                car_center = (boxes[:, :2] + boxes[:, 2:]) / 2
+                carplate_center = car_center + offset
+                boxes_lp = torch.cat((carplate_center - size_lp / 2, carplate_center + size_lp / 2), 1)
+                scores_lp = has_lp.cpu().numpy()
+                cls_dets_lp = np.hstack((boxes_lp.cpu().numpy(),
+                                    scores_lp[:, np.newaxis])).astype(np.float32,
+                                                                    copy=False)
+
+                all_boxes[j][i] = cls_dets_lp
 
         print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
                                                     num_images, detect_time))
-        total_time += detect_time
-    print("average time:")
-    print(total_time / num_images * 1000)
 
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
@@ -429,15 +459,15 @@ def evaluate_detections(box_list, output_dir, dataset):
 
 if __name__ == '__main__':
     # load net
-    num_classes = len(labelmap) + 1                      # +1 for background
+    num_classes = len(labelmap)                      # dont +1
     net = build_ssd('test', args.input_size, num_classes)            # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = CAR_CARPLATE_OFFSETDetection(root=args.voc_root,
+    dataset = CAR_CARPLATEDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CAR_CARPLATE_OFFSETAnnotationTransform(keep_difficult=True),
+                           target_transform=CAR_CARPLATEAnnotationTransform(keep_difficult=True),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
