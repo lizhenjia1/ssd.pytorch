@@ -130,10 +130,10 @@ def train():
         ssd_net.conf.apply(weights_init)
         ssd_net.four_corners.apply(weights_init)
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay)
-    # optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999),
-    #                        weight_decay=args.weight_decay)
+    # optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+    #                       weight_decay=args.weight_decay)
+    optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999),
+                           weight_decay=args.weight_decay)
     criterion = MultiBoxLoss_four_corners(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
 
