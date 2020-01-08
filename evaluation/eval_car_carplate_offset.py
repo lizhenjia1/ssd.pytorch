@@ -442,7 +442,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
                 all_boxes[j][i] = cls_dets_lp
 
-        print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
+        print('im_detect: {:d}/{:d} {:.4f}s'.format(i + 1,
                                                     num_images, detect_time))
 
     with open(det_file, 'wb') as f:
