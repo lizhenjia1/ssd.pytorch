@@ -57,6 +57,8 @@ parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
 parser.add_argument('--input_size', default=300, type=int,
                     help='SSD300 OR SSD512')
+parser.add_argument('--input_size_2', default=56, type=int, help='input size of the second network')
+parser.add_argument('--expand_num', default=3, type=int, help='expand ratio around the license plate')
 
 args = parser.parse_args()
 
@@ -435,10 +437,9 @@ def test_net(save_folder, off_net, corners_net, cuda, dataset, transform, top_k,
         lp_offset = detections[0, 1, has_car_lp_idx, 8:] * scale
         lp_center = car_center + lp_offset
         # 扩大车牌,并限制在车内
-        expand_ratio = 3
-        expanded_lp_top_left = lp_center - lp_size / 2 * expand_ratio
+        expanded_lp_top_left = lp_center - lp_size / 2 * args.expand_num
         expanded_lp_top_left = torch.max(expanded_lp_top_left, car_pt[:, :2])
-        expanded_lp_bottom_right = lp_center + lp_size / 2 * expand_ratio
+        expanded_lp_bottom_right = lp_center + lp_size / 2 * args.expand_num
         expanded_lp_bottom_right = torch.min(expanded_lp_bottom_right, car_pt[:, 2:])
         expand_lp_tensor = torch.cat([expanded_lp_top_left, expanded_lp_bottom_right], 1)
         # 将车牌限制在图片内
@@ -448,14 +449,14 @@ def test_net(save_folder, off_net, corners_net, cuda, dataset, transform, top_k,
         # TODO: try to use crop and resize, resize expanded region
         expand_lp = expand_lp_tensor.cpu().numpy().astype(np.int)
         num = expand_lp.shape[0]
-        total_xx = torch.zeros((num, 3, 300, 300))
+        total_xx = torch.zeros((num, 3, args.input_size_2, args.input_size_2))
         image = dataset.pull_image(i)
         for k in range(num):
             xmin = expand_lp[k, 0]
             ymin = expand_lp[k, 1]
             xmax = expand_lp[k, 2]
             ymax = expand_lp[k, 3]
-            x = cv2.resize(image[ymin:ymax+1, xmin:xmax+1], (300, 300)).astype(np.float32)
+            x = cv2.resize(image[ymin:ymax+1, xmin:xmax+1], (args.input_size_2, args.input_size_2)).astype(np.float32)
             x -= (104.0, 117.0, 123.0)
             x = x.astype(np.float32)
             x = x[:, :, ::-1].copy()
@@ -509,7 +510,7 @@ if __name__ == '__main__':
     off_net.load_state_dict(torch.load(args.trained_model_1))
     off_net.eval()
     from ssd_four_corners import build_ssd
-    corners_net = build_ssd('test', 300, num_classes)
+    corners_net = build_ssd('test', args.input_size_2, num_classes)
     corners_net.load_state_dict(torch.load(args.trained_model_2))
     corners_net.eval()
     print('Finished loading model!')
