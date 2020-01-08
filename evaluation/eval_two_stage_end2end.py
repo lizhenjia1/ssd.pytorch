@@ -424,7 +424,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         cls_dets = boxes.cpu().numpy().astype(np.float32, copy=False)
         all_expand_boxes.append(cls_dets)
 
-        print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
+        print('im_detect: {:d}/{:d} {:.4f}s'.format(i + 1,
                                                     num_images, detect_time))
 
     with open(det_file, 'wb') as f:
