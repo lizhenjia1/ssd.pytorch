@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0,1,3 python train_textboxes.py --dataset TEXTBOXES --dataset_root /data/TILT/720p/carplate_only --save_folder textboxes_weights/ --input_size 300 --lr 1e-4 --visdom True --batch_size 32 --obj_type textboxes
