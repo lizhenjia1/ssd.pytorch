@@ -30,6 +30,33 @@ import cv2
 import shapely
 from shapely.geometry import Polygon, MultiPoint
 
+
+# 计算任意两个四边形的iou
+def polygon_iou(list1, list2):
+    """
+    Intersection over union between two shapely polygons.
+    """
+    polygon_points1 = np.array(list1).reshape(4, 2)
+    poly1 = Polygon(polygon_points1).convex_hull
+    polygon_points2 = np.array(list2).reshape(4, 2)
+    poly2 = Polygon(polygon_points2).convex_hull
+    union_poly = np.concatenate((polygon_points1,polygon_points2))
+    if not poly1.intersects(poly2): # this test is fast and can accelerate calculation
+        iou = 0
+    else:
+        try:
+            inter_area = poly1.intersection(poly2).area
+            #union_area = poly1.area + poly2.area - inter_area
+            union_area = MultiPoint(union_poly).convex_hull.area
+            if union_area == 0:
+                return 0
+            iou = float(inter_area) / union_area
+        except shapely.geos.TopologicalError:
+            print('shapely.geos.TopologicalError occured, iou set to 0')
+            iou = 0
+    return iou
+
+
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
 else:
@@ -123,7 +150,15 @@ def parse_rec(filename):
         obj_struct['bbox'] = [int(bbox.find('xmin').text) - 1,
                               int(bbox.find('ymin').text) - 1,
                               int(bbox.find('xmax').text) - 1,
-                              int(bbox.find('ymax').text) - 1]
+                              int(bbox.find('ymax').text) - 1,
+                              int(bbox.find('x_top_left').text) - 1,
+                              int(bbox.find('y_top_left').text) - 1,
+                              int(bbox.find('x_top_right').text) - 1,
+                              int(bbox.find('y_top_right').text) - 1,
+                              int(bbox.find('x_bottom_right').text) - 1,
+                              int(bbox.find('y_bottom_right').text) - 1,
+                              int(bbox.find('x_bottom_left').text) - 1,
+                              int(bbox.find('y_bottom_left').text) - 1]
         objects.append(obj_struct)
 
     return objects
@@ -162,10 +197,14 @@ def write_voc_results_file(all_boxes, dataset):
                     continue
                 # the VOCdevkit expects 1-based indices
                 for k in range(dets.shape[0]):
-                    f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
-                            format(index[1], dets[k, -1],
-                                   dets[k, 0] + 1, dets[k, 1] + 1,
-                                   dets[k, 2] + 1, dets[k, 3] + 1))
+                    f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
+                                format(index[1], dets[k, -1],
+                                    dets[k, 0] + 1, dets[k, 1] + 1,
+                                    dets[k, 2] + 1, dets[k, 3] + 1,
+                                    dets[k, 4] + 1, dets[k, 5] + 1,
+                                    dets[k, 6] + 1, dets[k, 7] + 1,
+                                    dets[k, 8] + 1, dets[k, 9] + 1,
+                                    dets[k, 10] + 1, dets[k, 11] + 1))
 
 
 def do_python_eval(output_dir='output', use_07=True):
@@ -299,7 +338,6 @@ cachedir: Directory for caching the annotations
         class_recs[imagename] = {'bbox': bbox,
                                  'difficult': difficult,
                                  'det': det}
-
     # read dets
     detfile = detpath.format(classname)
     with open(detfile, 'r') as f:
@@ -326,20 +364,14 @@ cachedir: Directory for caching the annotations
             bb = BB[d, :].astype(float)
             ovmax = -np.inf
             BBGT = R['bbox'].astype(float)
+            bb = bb[4:]
+            BBGT = BBGT[:, 4:]
             if BBGT.size > 0:
                 # compute overlaps
-                # intersection
-                ixmin = np.maximum(BBGT[:, 0], bb[0])
-                iymin = np.maximum(BBGT[:, 1], bb[1])
-                ixmax = np.minimum(BBGT[:, 2], bb[2])
-                iymax = np.minimum(BBGT[:, 3], bb[3])
-                iw = np.maximum(ixmax - ixmin, 0.)
-                ih = np.maximum(iymax - iymin, 0.)
-                inters = iw * ih
-                uni = ((bb[2] - bb[0]) * (bb[3] - bb[1]) +
-                       (BBGT[:, 2] - BBGT[:, 0]) *
-                       (BBGT[:, 3] - BBGT[:, 1]) - inters)
-                overlaps = inters / uni
+                overlaps = np.zeros(BBGT.shape[0])
+                for idx in range(BBGT.shape[0]):
+                    overlap = polygon_iou(bb.tolist(), BBGT[idx, :].tolist())
+                    overlaps[idx] = overlap
                 ovmax = np.max(overlaps)
                 jmax = np.argmax(overlaps)
 
@@ -352,6 +384,14 @@ cachedir: Directory for caching the annotations
                         fp[d] = 1.
             else:
                 fp[d] = 1.
+
+        tp_num = np.sum(tp)
+        fp_num = np.sum(fp)
+        precision = tp_num / (tp_num + fp_num)
+        recall = tp_num / float(npos)
+        print("precision: %f"%(precision))
+        print("recall: %10f"%(recall))
+        print("F1: %f"%(2*precision*recall/(precision+recall)))
 
         # compute precision recall
         fp = np.cumsum(fp)
@@ -383,8 +423,6 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
     output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_carplate_four_corners', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
-    total_time = 0
-
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
         x = Variable(im.unsqueeze(0))
@@ -397,15 +435,23 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):
             dets = detections[0, j, :]
-            mask = dets[:, 0].gt(0.).expand(13, dets.size(0)).t()
+            mask = dets[:, 0].gt(0.5).expand(13, dets.size(0)).t()
             dets = torch.masked_select(dets, mask).view(-1, 13)
             if dets.size(0) == 0:
                 continue
-            boxes = dets[:, 1:5]
+            boxes = dets[:, 1:]
             boxes[:, 0] *= w
             boxes[:, 2] *= w
             boxes[:, 1] *= h
             boxes[:, 3] *= h
+            boxes[:, 4] *= w
+            boxes[:, 6] *= w
+            boxes[:, 8] *= w
+            boxes[:, 10] *= w
+            boxes[:, 5] *= h
+            boxes[:, 7] *= h
+            boxes[:, 9] *= h
+            boxes[:, 11] *= h
             scores = dets[:, 0].cpu().numpy()
             cls_dets = np.hstack((boxes.cpu().numpy(),
                                   scores[:, np.newaxis])).astype(np.float32,
@@ -414,9 +460,6 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
         print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
                                                     num_images, detect_time))
-        total_time += detect_time
-    print("average time:")
-    print(total_time / num_images * 1000)
 
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
