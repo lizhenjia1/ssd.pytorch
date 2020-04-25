@@ -468,7 +468,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
         # 将expand region转换为ndarray
         dets = detections[0, 1, :]
-        mask = dets[:, 9].gt(0.).expand(13, dets.size(0)).t()
+        mask = dets[:, 9].gt(0.5).expand(13, dets.size(0)).t()
         dets = torch.masked_select(dets, mask).view(-1, 13)
         if dets.size(0) == 0:
             continue
