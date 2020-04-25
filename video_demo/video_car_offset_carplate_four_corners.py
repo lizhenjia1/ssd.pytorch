@@ -14,8 +14,8 @@ sys.path.append(".")
 from data import CAR_CARPLATE_OFFSET_CLASSES as labels
 # load model
 from ssd_offset import build_ssd
-offset_net = build_ssd('test', 300, 2)    # initialize SSD
-offset_net.load_weights('weights/car_carplate_offset_weights/CAR_CARPLATE_OFFSET.pth')
+offset_net = build_ssd('test', 512, 2)    # initialize SSD
+offset_net.load_weights('weights/car_carplate_offset_weights/ssd512_40000_1080p.pth')
 from ssd_four_corners import build_ssd
 corners_net = build_ssd('test', 300, 2)  # initialize SSD
 corners_net.load_weights('weights/carplate_four_corners_with_border_weights/CARPLATE_FOUR_CORNERS_WITH_BORDER.pth')
@@ -170,7 +170,7 @@ def video_run(dir_name):
     video_name = dir_name.strip().split('/')[-1].split('.')[0]
     video_suffix = dir_name.strip().split('/')[-1].split('.')[1]
     # from n-th frame
-    videoCapture.set(cv2.CAP_PROP_POS_FRAMES, 1000)
+    videoCapture.set(cv2.CAP_PROP_POS_FRAMES, 0)
     fps = videoCapture.get(cv2.CAP_PROP_FPS)
     size = (int(videoCapture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(videoCapture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
     success, image = videoCapture.read()
@@ -182,7 +182,7 @@ def video_run(dir_name):
         img_h, img_w, _ = image.shape
         # skip frames
         if cur_num % 1 == 0:
-            x = cv2.resize(image, (300, 300)).astype(np.float32)
+            x = cv2.resize(image, (512, 512)).astype(np.float32)
             x -= (104.0, 117.0, 123.0)
             x = x.astype(np.float32)
             x = x[:, :, ::-1].copy()
@@ -216,7 +216,7 @@ def video_run(dir_name):
                     label_name = labels[i - 1]
                     display_txt = '%s: %.2f' % (label_name, score)
                     pt = (detections[0, i, j, 1:5] * scale).cpu().numpy()
-                    cv2.rectangle(image_copy, (pt[0], pt[1]), (pt[2], pt[3]), (0, 0, 255), 2)
+                    # cv2.rectangle(image_copy, (pt[0], pt[1]), (pt[2], pt[3]), (0, 0, 255), 2)
                     j += 1
 
                 # has car and carplate
@@ -346,8 +346,9 @@ def video_run(dir_name):
                     # cv2.waitKey(0)
 
                     predict = crnn_recognition(img_crop, lp_rec_model)
-                    image_copy = putText(image_copy, predict, (lp_context_array[q, 0], lp_context_array[q, 1]),
-                                         font_path, (0, 255, 0), 30)
+                    if carplate_ymax - carplate_ymin >= 20:
+                        image_copy = putText(image_copy, predict, (carplate_xmin-50, carplate_ymin-50),
+                                            font_path, (0, 0, 255), 50)
 
             plt.show()
 
@@ -364,6 +365,9 @@ def video_run(dir_name):
     video.release()
     videoCapture.release()
     cv2.destroyAllWindows()
+
+# for i in range(1, 11):
+#     video_run('/dataset/Video/zhongshihua/clip/' + str(i) + '.mp4')
 
 
 # select video from Dialog
