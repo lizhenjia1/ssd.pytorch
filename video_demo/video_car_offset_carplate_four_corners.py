@@ -7,7 +7,7 @@ import cv2
 if torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 from matplotlib import pyplot as plt
-
+import time
 import sys
 sys.path.append(".")
 
@@ -352,8 +352,6 @@ def video_run(dir_name):
 
             plt.show()
 
-
-
         video.write(image_copy)
         cv2.imshow('image', image_copy)
         success, image = videoCapture.read()
@@ -365,6 +363,8 @@ def video_run(dir_name):
     video.release()
     videoCapture.release()
     cv2.destroyAllWindows()
+
+    return cur_num
 
 # for i in range(1, 11):
 #     video_run('/dataset/Video/zhongshihua/clip/' + str(i) + '.mp4')
@@ -378,7 +378,12 @@ def xz():
     filename = tkinter.filedialog.askopenfilename()
     if filename != '':
         lb.config(text="您选择的视频是："+filename)
-        video_run(filename)
+        begin = time.time()
+        cur_num = video_run(filename)
+        end=time.time()
+        print('totol_time:', str(end-begin))
+        print('totol_frame:', str(cur_num))
+        print('FPS:', str(int(cur_num/(end-begin))))
     else:
         lb.config(text="您没有选择任何视频")
 
