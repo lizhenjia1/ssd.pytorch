@@ -398,6 +398,19 @@ class SSD_two_stage_end2end(nn.Module):
             # n*64*crop_height*crop_width
             crops_torch = CropAndResizeFunction.apply(image_torch, boxes, box_index, crop_height, crop_width, 0)
 
+            # Visualize the crops
+            # print(crops_torch.data.size())
+            # crops_torch_data = crops_torch.data.cpu().numpy().transpose(0, 2, 3, 1)
+            # import matplotlib.pyplot as plt
+            # for m in range(rois_squeeze.shape[0]):
+            #     fig = plt.figure()
+            #     currentAxis = plt.gca()
+            #     # pt = gt_2[m][0, :4].cpu().numpy() * self.size_2
+            #     # coords = (pt[0], pt[1]), pt[2] - pt[0] + 1, pt[3] - pt[1] + 1
+            #     # currentAxis.add_patch(plt.Rectangle(*coords, fill=False))
+            #     plt.imshow(crops_torch_data[m, :, :, 33])
+            #     plt.show()
+
             # 第二个网络!!!!!!!!!!!!!!!!!!!!!!!!!!
             x_2 = crops_torch
 
@@ -475,19 +488,6 @@ class SSD_two_stage_end2end(nn.Module):
         else:
             print("ERROR: Phase: " + self.phase + " not recognized")
             return
-
-        # Visualize the crops
-        # print(crops_torch.data.size())
-        # crops_torch_data = crops_torch.data.cpu().numpy().transpose(0, 2, 3, 1)
-        # import matplotlib.pyplot as plt
-        # for m in range(rois_squeeze.shape[0]):
-        #     fig = plt.figure()
-        #     currentAxis = plt.gca()
-        #     # pt = gt_2[m][0, :4].cpu().numpy() * self.size_2
-        #     # coords = (pt[0], pt[1]), pt[2] - pt[0] + 1, pt[3] - pt[1] + 1
-        #     # currentAxis.add_patch(plt.Rectangle(*coords, fill=False))
-        #     plt.imshow(crops_torch_data[m, :, :, 10])
-        #     plt.show()
 
         return output
 

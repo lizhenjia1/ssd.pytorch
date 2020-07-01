@@ -61,17 +61,22 @@ for img_id in range(100):
         if i == 0:
             continue
         j = 0
-        th = 0.6
+        th = 0.5
         while detections[0, i, j, 0] > th:
             score = detections[0, i, j, 0]
             has_lp = detections[0, i, j, 5]
             label_name = labels[i-1]
-            display_txt = '%s: %.2f' % (label_name, score)
+            display_txt = '%.2f' % has_lp
             pt = (detections[0, i, j, 1:5]*scale).cpu().numpy()
             coords = (pt[0], pt[1]), pt[2] - pt[0] + 1, pt[3] - pt[1] + 1
-            color = colors[i]
+            color = colors[0]
+            color_car_center = colors[1]
+            color_offset = colors[2]
+            color_lp = colors[3]
+            color_lp_center = colors[4]
+            color_has_lp = colors[5]
             currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
-            currentAxis.text(pt[0], pt[1], display_txt, bbox={'facecolor':color, 'alpha':0.5})
+            currentAxis.text(pt[0], pt[1], display_txt, bbox={'facecolor':color_has_lp, 'alpha':0.5})
 
             if has_lp > th:
                 size_lp_offset = (detections[0, i, j, 6:] * scale).cpu().numpy()
@@ -80,11 +85,12 @@ for img_id in range(100):
                 offset = size_lp_offset[2:]
                 center = ((pt[0] + pt[2]) / 2, (pt[1] + pt[3]) / 2)
                 center_lp = center + offset
-                currentAxis.plot(center[0], center[1], 'o')
-                currentAxis.plot((center[0], center_lp[0]), (center[1], center_lp[1]))
+                currentAxis.plot(center[0], center[1], 'o', color = color_car_center, markersize=10)
+                currentAxis.plot(center_lp[0], center_lp[1], 'o', color = color_lp_center, markersize=10)
+                currentAxis.plot((center[0], center_lp[0]), (center[1], center_lp[1]), color = color_offset)
 
                 coords_lp = center_lp - size_lp / 2, size_lp[0], size_lp[1]
-                currentAxis.add_patch(plt.Rectangle(*coords_lp, fill=False, edgecolor=color, linewidth=2))
+                currentAxis.add_patch(plt.Rectangle(*coords_lp, fill=False, edgecolor=color_lp, linewidth=2))
 
             j += 1
     plt.show()
