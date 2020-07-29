@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from layers import *
 from data import two_stage_end2end, carplate_branch, change_cfg_for_ssd512
 import os
+import numpy as np
 
 from layers.modules import ProposalTargetLayer_offset
 # https://github.com/longcw/RoIAlign.pytorch
@@ -346,7 +347,7 @@ class SSD_TITS_Neuro(nn.Module):
                     carplate_loc.view(carplate_loc.size(0), -1, 4),
                     carplate_conf.view(carplate_conf.size(0), -1, self.num_classes),
                     self.carplate_priors,
-                    four_corners.view(four_corners.size(0), -1, 8),
+                    carplate_four_corners.view(carplate_four_corners.size(0), -1, 8),
                     loc.view(loc.size(0), -1, 4),
                     conf.view(conf.size(0), -1, self.num_classes),
                     self.priors,
@@ -365,7 +366,7 @@ class SSD_TITS_Neuro(nn.Module):
                     carplate_loc.view(carplate_loc.size(0), -1, 4),
                     carplate_conf.view(carplate_conf.size(0), -1, self.num_classes),
                     self.carplate_priors,
-                    four_corners.view(four_corners.size(0), -1, 8)
+                    carplate_four_corners.view(carplate_four_corners.size(0), -1, 8),
                     loc.view(loc.size(0), -1, 4),
                     conf.view(conf.size(0), -1, self.num_classes),
                     self.priors,
@@ -514,9 +515,37 @@ class SSD_TITS_Neuro(nn.Module):
             # (num_car, 12)
             output_2_pos[:, 1:] = output_2_pos[:, 1:] * rois_size_expand + rois_top_left_expand
 
-            # 存储车牌的检测结果
+            # Neuro
             num_car = output_2_pos.shape[0]
-            output[0, 2, :num_car, :] = output_2_pos
+            # output[0, 2, :num_car, :] = output_2_pos
+
+            # TITS
+            output_carplate = self.carplate_detect(
+                carplate_loc.view(carplate_loc.size(0), -1, 4),                   # loc preds
+                self.carplate_softmax(carplate_conf.view(carplate_conf.size(0), -1,
+                             self.num_classes)),                # conf preds
+                self.carplate_priors.cuda(),                 # default boxes
+                carplate_four_corners.view(carplate_four_corners.size(0), -1, 8)
+            )
+            # output[0, 2, :, :] = output_carplate[0, 1, :, :]
+
+            # TITS+Neuro
+            conf_thresh = 0.01
+            nms_thresh = 0.45
+            top_k = 200
+            output_carplate_TITS_Neuro = torch.cat((output_2_pos, output_carplate[0, 1, :, :]), 0)
+            output_carplate_TITS_Neuro = output_carplate_TITS_Neuro.detach()
+            conf_scores = output_carplate_TITS_Neuro[:, 0]
+            c_mask = conf_scores.gt(conf_thresh)
+            scores = conf_scores[c_mask]
+            boxes = output_carplate_TITS_Neuro[:, 1:5]
+            corners = output_carplate_TITS_Neuro[:, 5:]
+            from layers.box_utils import nms
+            ids, count = nms(boxes, scores, nms_thresh, top_k)
+            output[0, 2, :count] = torch.cat((scores[ids[:count]].unsqueeze(1),
+                                                boxes[ids[:count]], corners[ids[:count]]), 1)
+
+
 
             # 存储expand区域的结果,放在车后面,并设置flag
             output[0, 1, :num_car, 5:9] = lp_bbox
@@ -651,21 +680,27 @@ def multibox(vgg, extra_layers, cfg, num_classes, vgg_2, cfg_2):
 
     carplate_loc_layers = []
     carplate_conf_layers = []
+    carplate_four_corners_layers = []
     carplate_vgg_source = [21, -2]
 
     for k, v in enumerate(carplate_vgg_source):
         carplate_loc_layers += [nn.Conv2d(vgg[v].out_channels,
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         carplate_conf_layers += [nn.Conv2d(vgg[v].out_channels,
-                        cfg[k] * num_classes, kernel_size=3, padding=1)]
+                                 cfg[k] * num_classes, kernel_size=3, padding=1)]
+        carplate_four_corners_layers += [nn.Conv2d(vgg[v].out_channels,
+                                 cfg[k] * 8, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
         carplate_loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                  * 4, kernel_size=3, padding=1)]
         carplate_conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
+        carplate_four_corners_layers += [nn.Conv2d(v.out_channels, cfg[k]
+                                  * 8, kernel_size=3, padding=1)]
     
     return vgg, extra_layers, (loc_layers, conf_layers, has_lp_layers, size_lp_layers, offset_layers),\
-           vgg_2, (loc_layers_2, conf_layers_2, four_corners_layers_2), (carplate_loc_layers, carplate_conf_layers)
+               vgg_2, (loc_layers_2, conf_layers_2, four_corners_layers_2),\
+               (carplate_loc_layers, carplate_conf_layers, carplate_four_corners_layers)
 
 
 base = {
@@ -701,5 +736,5 @@ def build_ssd(phase, size=300, size_2=56, num_classes=21, expand_num=3):
                                                                 vgg_2(base[str(size_2)], 64),
                                                                 mbox[str(size_2)]
                                                                 )
-    return SSD_two_stage_end2end(phase, size, size_2, base_, extras_, head_, base_2_, head_2_,
+    return SSD_TITS_Neuro(phase, size, size_2, base_, extras_, head_, base_2_, head_2_,
             carplate_head_, num_classes, expand_num)

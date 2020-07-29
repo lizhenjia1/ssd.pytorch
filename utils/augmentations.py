@@ -775,6 +775,196 @@ class RandomSampleCrop_two_stage_end2end(object):
                 return current_image, current_boxes, current_labels
 
 
+# 一旦切到了车牌就continue, and must has carplate
+class RandomSampleCrop_TITS_Neuro(object):
+    """Crop
+    Arguments:
+        img (Image): the image being input during training
+        boxes (Tensor): the original bounding boxes in pt form
+        labels (Tensor): the class labels for each bbox
+        mode (float tuple): the min and max jaccard overlaps
+    Return:
+        (img, boxes, classes)
+            img (Image): the cropped image
+            boxes (Tensor): the adjusted bounding boxes in pt form
+            labels (Tensor): the class labels for each bbox
+    """
+
+    def __init__(self):
+        self.sample_options = (
+            # using entire original input image
+            None,
+            # sample a patch s.t. MIN jaccard w/ obj in .1,.3,.4,.7,.9
+            (0.1, None),
+            (0.3, None),
+            (0.7, None),
+            (0.9, None),
+            # randomly sample a patch
+            (None, None),
+        )
+
+    def __call__(self, image, boxes=None, labels=None):
+        height, width, _ = image.shape
+        while True:
+            # randomly choose a mode
+            mode = random.choice(self.sample_options)
+            if mode is None:
+                return image, boxes, labels
+
+            min_iou, max_iou = mode
+            if min_iou is None:
+                min_iou = float('-inf')
+            if max_iou is None:
+                max_iou = float('inf')
+
+            # max trails (50)
+            for _ in range(50):
+                current_image = image
+
+                # size of original image [0.09, 1)
+                w = random.uniform(0.3 * width, width)
+                h = random.uniform(0.3 * height, height)
+
+                # aspect ratio constraint b/t .5 & 2
+                if h / w < 0.5 or h / w > 2:
+                    continue
+
+                left = random.uniform(width - w)
+                top = random.uniform(height - h)
+
+                # convert to integer rect x1,y1,x2,y2
+                rect = np.array([int(left), int(top), int(left + w), int(top + h)])
+
+                # calculate IoU (jaccard overlap) b/t the cropped and gt boxes
+                overlap = jaccard_numpy(boxes, rect)
+
+                # is min and max overlap constraint satisfied? if not try again
+                if overlap.max() < min_iou or overlap.min() > max_iou:
+                    continue
+
+                # cut the crop from the image
+                current_image = current_image[rect[1]:rect[3], rect[0]:rect[2], :]
+
+                # keep overlap with gt box IF center in sampled patch
+                centers = (boxes[:, :2] + boxes[:, 2:4]) / 2.0
+
+                # mask in all gt boxes that above and to the left of centers
+                m1 = (rect[0] < centers[:, 0]) * (rect[1] < centers[:, 1])
+
+                # mask in all gt boxes that under and to the right of centers
+                m2 = (rect[2] > centers[:, 0]) * (rect[3] > centers[:, 1])
+
+                # mask in that both m1 and m2 are true
+                mask = m1 * m2
+
+                # have any valid boxes? try again if not
+                if not mask.any():
+                    continue
+
+                # take only matching gt boxes
+                current_boxes = boxes[mask, :].copy()
+
+                # take only matching gt labels
+                current_labels = labels[mask]
+
+                # should we use the box left and top corner or the crop's
+                current_boxes[:, :2] = np.maximum(current_boxes[:, :2], rect[:2])
+                # adjust to crop (by substracting crop's left,top)
+                current_boxes[:, :2] -= rect[:2]
+
+                current_boxes[:, 2:4] = np.minimum(current_boxes[:, 2:4], rect[2:])
+                # adjust to crop (by substracting crop's left,top)
+                current_boxes[:, 2:4] -= rect[:2]
+
+                # has carplate and whole of carplate is in batch
+                has_carplate_mask = current_boxes[:, 4].astype(np.int32) > 0
+
+                # 这个是车牌中心在crop中的情况
+                # carplate_m1 = (rect[0] < carplate_centers[:, 0]) * (rect[1] < carplate_centers[:, 1])
+                # carplate_m2 = (rect[2] > carplate_centers[:, 0]) * (rect[3] > carplate_centers[:, 1])
+                # carplate_mask = has_carplate_mask * carplate_m1 * carplate_m2
+
+                # carplate left_top and right_bottom
+                carplate_bbox = current_boxes[:, 9:13]
+                carplate_xmin = carplate_bbox[:, 0].reshape((-1, 1))
+                carplate_ymin = carplate_bbox[:, 1].reshape((-1, 1))
+                carplate_xmax = carplate_bbox[:, 2].reshape((-1, 1))
+                carplate_ymax = carplate_bbox[:, 3].reshape((-1, 1))
+
+                # carplate four points
+                carplate_four_points = current_boxes[:, 13:21]
+                carplate_x_top_left = carplate_four_points[:, 0].reshape((-1, 1))
+                carplate_y_top_left = carplate_four_points[:, 1].reshape((-1, 1))
+                carplate_x_top_right = carplate_four_points[:, 2].reshape((-1, 1))
+                carplate_y_top_right = carplate_four_points[:, 3].reshape((-1, 1))
+                carplate_x_bottom_right = carplate_four_points[:, 4].reshape((-1, 1))
+                carplate_y_bottom_right = carplate_four_points[:, 5].reshape((-1, 1))
+                carplate_x_bottom_left = carplate_four_points[:, 6].reshape((-1, 1))
+                carplate_y_bottom_left = carplate_four_points[:, 7].reshape((-1, 1))
+
+                carplate_overlap = jaccard_numpy(carplate_bbox, rect)
+                carplate_m1 = carplate_overlap < 1e-14  # 车牌完全在crop外
+                area_carplate = (carplate_xmax - carplate_xmin) * (carplate_ymax - carplate_ymin)
+                area_carplate = area_carplate.reshape((-1))  # 这里很关键,不然是一个矩阵
+                carplate_m2 = abs(intersect(carplate_bbox, rect) - area_carplate) < 1e-14  # 车牌完全在crop内
+                carplate_not_crop_mask = carplate_m1 | carplate_m2
+
+                # 如果有车牌被切到直接跳过, and ensure at least one carplate
+                if (not carplate_not_crop_mask.all()) or np.array(carplate_m1).all():
+                    continue
+
+                # 有车牌并且车牌全部在crop中才继续
+                carplate_mask = has_carplate_mask * carplate_m2
+
+                # new position of carplate
+                carplate_xmin = np.maximum(carplate_xmin, rect[0])
+                carplate_xmin -= rect[0]
+                carplate_ymin = np.maximum(carplate_ymin, rect[1])
+                carplate_ymin -= rect[1]
+                carplate_xmax = np.minimum(carplate_xmax, rect[2])
+                carplate_xmax -= rect[0]
+                carplate_ymax = np.minimum(carplate_ymax, rect[3])
+                carplate_ymax -= rect[1]
+
+                # new four points of carplate
+                carplate_x_top_left -= rect[0]
+                carplate_y_top_left -= rect[1]
+                carplate_x_top_right -= rect[0]
+                carplate_y_top_right -= rect[1]
+                carplate_x_bottom_right -= rect[0]
+                carplate_y_bottom_right -= rect[1]
+                carplate_x_bottom_left -= rect[0]
+                carplate_y_bottom_left -= rect[1]
+
+                # new size and offset of carplate
+                current_boxes[carplate_mask, 5] = carplate_xmax[carplate_mask, 0] - carplate_xmin[carplate_mask, 0]
+                current_boxes[carplate_mask, 6] = carplate_ymax[carplate_mask, 0] - carplate_ymin[carplate_mask, 0]
+                centers_new = (current_boxes[carplate_mask, :2] + current_boxes[carplate_mask, 2:4]) / 2.0
+                carplate_centers_new = (np.hstack((carplate_xmin[carplate_mask], carplate_ymin[carplate_mask])) +
+                                        np.hstack((carplate_xmax[carplate_mask], carplate_ymax[carplate_mask]))) / 2.0
+
+                current_boxes[carplate_mask, 7:9] = carplate_centers_new - centers_new
+
+                current_boxes[carplate_mask, 9] = carplate_xmin[carplate_mask, 0]
+                current_boxes[carplate_mask, 10] = carplate_ymin[carplate_mask, 0]
+                current_boxes[carplate_mask, 11] = carplate_xmax[carplate_mask, 0]
+                current_boxes[carplate_mask, 12] = carplate_ymax[carplate_mask, 0]
+
+                current_boxes[carplate_mask, 13] = carplate_x_top_left[carplate_mask, 0]
+                current_boxes[carplate_mask, 14] = carplate_y_top_left[carplate_mask, 0]
+                current_boxes[carplate_mask, 15] = carplate_x_top_right[carplate_mask, 0]
+                current_boxes[carplate_mask, 16] = carplate_y_top_right[carplate_mask, 0]
+                current_boxes[carplate_mask, 17] = carplate_x_bottom_right[carplate_mask, 0]
+                current_boxes[carplate_mask, 18] = carplate_y_bottom_right[carplate_mask, 0]
+                current_boxes[carplate_mask, 19] = carplate_x_bottom_left[carplate_mask, 0]
+                current_boxes[carplate_mask, 20] = carplate_y_bottom_left[carplate_mask, 0]
+
+                # without carplate, set to 0
+                current_boxes[~carplate_mask, 4:] = 0
+
+                return current_image, current_boxes, current_labels
+
+
 # 作用就是在图片周围扩出一些区域,原图内容并不变,扩张后的图片有所变化,之后再resize;因为offset和size都不变,所以该函数适用于offset
 class Expand(object):
     def __init__(self, mean):
@@ -867,6 +1057,10 @@ class Expand_two_stage_end2end(object):
         boxes[:, 17:19] += (int(left), int(top))
         boxes[:, 19:21] += (int(left), int(top))
 
+        # has carplate
+        has_carplate_mask = boxes[:, 4].astype(np.int32) > 0
+        boxes[~has_carplate_mask, 4:] = 0
+
         return image, boxes, labels
 
 
@@ -889,6 +1083,11 @@ class RandomMirror_offset(object):
             boxes = boxes.copy()
             boxes[:, 0:4:2] = width - boxes[:, 2::-2]  # xmax变xmin, xmin变xmax
             boxes[:, 7] = -boxes[:, 7]  # x_offset取相反数
+
+            # has carplate
+            has_carplate_mask = boxes[:, 4].astype(np.int32) > 0
+            boxes[~has_carplate_mask, 4:] = 0
+
         return image, boxes, classes
 
 
@@ -925,6 +1124,11 @@ class RandomMirror_two_stage_end2end(object):
             # 四边形下面两点交换
             boxes[:, 17:21:2] = width - boxes[:, 19:16:-2]
             boxes[:, [18, 20]] = boxes[:, [20, 18]]
+
+            # has carplate
+            has_carplate_mask = boxes[:, 4].astype(np.int32) > 0
+            boxes[~has_carplate_mask, 4:] = 0
+
         return image, boxes, classes
 
 
@@ -1047,6 +1251,26 @@ class SSDAugmentation_two_stage_end2end(object):
             PhotometricDistort(),
             Expand_two_stage_end2end(self.mean),
             RandomSampleCrop_two_stage_end2end(),
+            RandomMirror_two_stage_end2end(),
+            ToPercentCoords_two_stage_end2end(),
+            Resize(self.size),
+            SubtractMeans(self.mean)
+        ])
+
+    def __call__(self, img, boxes, labels):
+        return self.augment(img, boxes, labels)
+
+
+class SSDAugmentation_TITS_Neuro(object):
+    def __init__(self, size=300, mean=(104, 117, 123)):
+        self.mean = mean
+        self.size = size
+        self.augment = Compose([
+            ConvertFromInts(),
+            ToAbsoluteCoords_two_stage_end2end(),
+            PhotometricDistort(),
+            Expand_two_stage_end2end(self.mean),
+            RandomSampleCrop_TITS_Neuro(),
             RandomMirror_two_stage_end2end(),
             ToPercentCoords_two_stage_end2end(),
             Resize(self.size),
