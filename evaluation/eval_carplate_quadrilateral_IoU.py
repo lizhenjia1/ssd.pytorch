@@ -86,6 +86,8 @@ parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
 parser.add_argument('--input_size', default=300, type=int,
                     help='SSD300 OR SSD512')
+parser.add_argument('--object_size', default='all', type=str,
+                    help='which size to test, all, small, medium, large')
 
 args = parser.parse_args()
 
@@ -507,10 +509,9 @@ if __name__ == '__main__':
     net.eval()
     print('Finished loading model!')
     # load data
-    object_size = 'small'
     dataset = CARPLATEDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CARPLATEAnnotationTransform(keep_difficult=True, object_size=object_size),
+                           target_transform=CARPLATEAnnotationTransform(keep_difficult=True, object_size=args.object_size),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
@@ -518,4 +519,4 @@ if __name__ == '__main__':
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
              BaseTransform(net.size, dataset_mean), args.top_k, args.input_size,
-             thresh=args.confidence_threshold, object_size=object_size)
+             thresh=args.confidence_threshold, object_size=args.object_size)
