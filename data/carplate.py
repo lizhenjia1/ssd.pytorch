@@ -14,7 +14,7 @@ CARPLATE_CLASSES = (  # always index 0
     'carplate', )
 
 # note: if you used our download scripts, this should be right
-CARPLATE_ROOT = osp.join('/data', "TILT/720p/carplate_only/")
+CARPLATE_ROOT = osp.join('/data', "TILT/1080p/carplate_only/")
 
 
 class CARPLATEAnnotationTransform(object):
@@ -30,10 +30,11 @@ class CARPLATEAnnotationTransform(object):
         width (int): width
     """
 
-    def __init__(self, class_to_ind=None, keep_difficult=False):
+    def __init__(self, class_to_ind=None, keep_difficult=False, object_size='all'):
         self.class_to_ind = class_to_ind or dict(
             zip(CARPLATE_CLASSES, range(len(CARPLATE_CLASSES))))
         self.keep_difficult = keep_difficult
+        self.object_size = object_size
 
     def __call__(self, target, width, height):
         """
@@ -50,6 +51,21 @@ class CARPLATEAnnotationTransform(object):
                 continue
             name = obj.find('name').text.lower().strip()
             bbox = obj.find('bndbox')
+
+            x_top_left = int(bbox.find('x_top_left').text) - 1
+            y_top_left = int(bbox.find('y_top_left').text) - 1
+            x_bottom_left = int(bbox.find('x_bottom_left').text) - 1
+            y_bottom_left = int(bbox.find('y_bottom_left').text) - 1
+            x_bottom_right = int(bbox.find('x_bottom_right').text) - 1
+            y_bottom_right = int(bbox.find('y_bottom_right').text) - 1
+
+            QP = np.array([x_top_left - x_bottom_left, y_top_left - y_bottom_left])
+            v = np.array([x_bottom_left - x_bottom_right, y_bottom_left - y_bottom_right])
+            h = np.linalg.norm(np.cross(QP, v))/np.linalg.norm(v)
+            
+            if self.object_size != 'all':
+                if (h <= 16 and self.object_size != 'small') or (h > 16 and h <= 32 and self.object_size != 'medium') or (h > 32 and self.object_size != 'large'):
+                    continue
 
             pts = ['xmin', 'ymin', 'xmax', 'ymax']
             bndbox = []
@@ -85,7 +101,7 @@ class CARPLATEDetection(data.Dataset):
 
     def __init__(self, root,
                  image_sets=None,
-                 transform=None, target_transform=CARPLATEAnnotationTransform(keep_difficult=True),
+                 transform=None, target_transform=CARPLATEAnnotationTransform(keep_difficult=True, object_size='all'),
                  dataset_name='trainval'):
         self.root = root
         self.image_set = image_sets
@@ -118,11 +134,12 @@ class CARPLATEDetection(data.Dataset):
 
         if self.transform is not None:
             target = np.array(target)
-            img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
-            # to rgb
-            img = img[:, :, (2, 1, 0)]
-            # img = img.transpose(2, 0, 1)
-            target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
+            if target.shape[0] > 0:
+                img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
+                # to rgb
+                img = img[:, :, (2, 1, 0)]
+                # img = img.transpose(2, 0, 1)
+                target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
         return torch.from_numpy(img).permute(2, 0, 1), target, height, width
         # return torch.from_numpy(img), target, height, width
 
