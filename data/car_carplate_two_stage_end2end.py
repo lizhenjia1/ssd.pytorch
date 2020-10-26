@@ -162,6 +162,11 @@ class CAR_CARPLATE_TWO_STAGE_END2ENDDetection(data.Dataset):
         Return:
             PIL img
         '''
+        # 720p, indirect cant, direct can
+        # trainval ['001721', '000978', '002153', '004781', '002146', '000049', '005338', '002532']
+        # paper ['001721', '002153', '004781']
+        # 1080p, indirect cant, direct can
+        # test ['003046']
         img_id = self.ids[index]
         return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
 
