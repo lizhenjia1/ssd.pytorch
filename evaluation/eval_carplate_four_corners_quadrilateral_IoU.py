@@ -86,6 +86,8 @@ parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
 parser.add_argument('--input_size', default=300, type=int,
                     help='SSD300 OR SSD512')
+parser.add_argument('--object_size', default='all', type=str,
+                    help='which size to test, all, small, medium, large')
 
 args = parser.parse_args()
 
@@ -136,7 +138,7 @@ class Timer(object):
             return self.diff
 
 
-def parse_rec(filename):
+def parse_rec(filename, object_size):
     """ Parse a PASCAL VOC xml file """
     tree = ET.parse(filename)
     objects = []
@@ -159,6 +161,22 @@ def parse_rec(filename):
                               int(bbox.find('y_bottom_right').text) - 1,
                               int(bbox.find('x_bottom_left').text) - 1,
                               int(bbox.find('y_bottom_left').text) - 1]
+
+        x_top_left = int(bbox.find('x_top_left').text) - 1
+        y_top_left = int(bbox.find('y_top_left').text) - 1
+        x_bottom_left = int(bbox.find('x_bottom_left').text) - 1
+        y_bottom_left = int(bbox.find('y_bottom_left').text) - 1
+        x_bottom_right = int(bbox.find('x_bottom_right').text) - 1
+        y_bottom_right = int(bbox.find('y_bottom_right').text) - 1
+
+        QP = np.array([x_top_left - x_bottom_left, y_top_left - y_bottom_left])
+        v = np.array([x_bottom_left - x_bottom_right, y_bottom_left - y_bottom_right])
+        h = np.linalg.norm(np.cross(QP, v))/np.linalg.norm(v)
+        
+        if object_size != 'all':
+            if (h <= 16 and object_size != 'small') or (h > 16 and h <= 32 and object_size != 'medium') or (h > 32 and object_size != 'large'):
+                continue
+                        
         objects.append(obj_struct)
 
     return objects
@@ -207,7 +225,7 @@ def write_voc_results_file(all_boxes, dataset):
                                     dets[k, 10] + 1, dets[k, 11] + 1))
 
 
-def do_python_eval(output_dir='output', use_07=True):
+def do_python_eval(output_dir='output', use_07=True, object_size='all'):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     aps = []
     # The PASCAL VOC metric changed in 2010
@@ -219,7 +237,7 @@ def do_python_eval(output_dir='output', use_07=True):
         filename = get_voc_results_file_template(set_type, cls)
         rec, prec, ap = voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
-           ovthresh=0.5, use_07_metric=use_07_metric)
+           ovthresh=0.5, use_07_metric=use_07_metric, object_size=object_size)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
@@ -278,7 +296,7 @@ def voc_eval(detpath,
              classname,
              cachedir,
              ovthresh=0.5,
-             use_07_metric=True):
+             use_07_metric=True, object_size='all'):
     """rec, prec, ap = voc_eval(detpath,
                            annopath,
                            imagesetfile,
@@ -313,7 +331,10 @@ cachedir: Directory for caching the annotations
         # load annots
         recs = {}
         for i, imagename in enumerate(imagenames):
-            recs[imagename] = parse_rec(annopath % (imagename))
+            parse_results = parse_rec(annopath % (imagename), object_size)
+            if parse_results == []:
+                continue
+            recs[imagename] = parse_results
             if i % 100 == 0:
                 print('Reading annotation for {:d}/{:d}'.format(
                    i + 1, len(imagenames)))
@@ -329,7 +350,7 @@ cachedir: Directory for caching the annotations
     # extract gt objects for this class
     class_recs = {}
     npos = 0
-    for imagename in imagenames:
+    for imagename in recs.keys():
         R = [obj for obj in recs[imagename] if obj['name'] == classname]
         bbox = np.array([x['bbox'] for x in R])
         difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
@@ -389,6 +410,9 @@ cachedir: Directory for caching the annotations
         fp_num = np.sum(fp)
         precision = tp_num / (tp_num + fp_num)
         recall = tp_num / float(npos)
+        print("tp_num: " + str(tp_num))
+        print("fp_num: " + str(fp_num))
+        print("total_num: " + str(npos))
         print("precision: %f"%(precision))
         print("recall: %10f"%(recall))
         print("F1: %f"%(2*precision*recall/(precision+recall)))
@@ -410,7 +434,7 @@ cachedir: Directory for caching the annotations
 
 
 def test_net(save_folder, net, cuda, dataset, transform, top_k,
-             im_size=300, thresh=0.05):
+             im_size=300, thresh=0.05, object_size='all'):
     num_images = len(dataset)
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
@@ -425,6 +449,8 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
+        if gt.shape[0] < 1:
+            continue
         x = Variable(im.unsqueeze(0))
         if args.cuda:
             x = x.cuda()
@@ -465,12 +491,12 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    evaluate_detections(all_boxes, output_dir, dataset)
+    evaluate_detections(all_boxes, output_dir, dataset, object_size)
 
 
-def evaluate_detections(box_list, output_dir, dataset):
+def evaluate_detections(box_list, output_dir, dataset, object_size):
     write_voc_results_file(box_list, dataset)
-    do_python_eval(output_dir)
+    do_python_eval(output_dir, object_size=object_size)
 
 
 if __name__ == '__main__':
@@ -483,7 +509,7 @@ if __name__ == '__main__':
     # load data
     dataset = CARPLATE_FOUR_CORNERSDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CARPLATE_FOUR_CORNERSAnnotationTransform(keep_difficult=True),
+                           target_transform=CARPLATE_FOUR_CORNERSAnnotationTransform(keep_difficult=True, object_size=args.object_size),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
@@ -491,4 +517,4 @@ if __name__ == '__main__':
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
              BaseTransform(net.size, dataset_mean), args.top_k, args.input_size,
-             thresh=args.confidence_threshold)
+             thresh=args.confidence_threshold, object_size=args.object_size)

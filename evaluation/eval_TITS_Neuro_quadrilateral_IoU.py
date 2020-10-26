@@ -13,8 +13,8 @@ from torch.autograd import Variable
 import sys
 sys.path.append(".")
 
-from data import CAR_CARPLATEDetection, CAR_CARPLATEAnnotationTransform, CAR_CARPLATE_ROOT, BaseTransform
-from data import CAR_CARPLATE_CLASSES as labelmap
+from data import CARPLATE_FOUR_CORNERSDetection, CARPLATE_FOUR_CORNERSAnnotationTransform, CARPLATE_FOUR_CORNERS_ROOT, BaseTransform
+from data import CARPLATE_FOUR_CORNERS_CLASSES as labelmap
 import torch.utils.data as data
 
 from ssd_TITS_Neuro import build_ssd
@@ -80,7 +80,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=CAR_CARPLATE_ROOT,
+parser.add_argument('--voc_root', default=CARPLATE_FOUR_CORNERS_ROOT,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -88,6 +88,8 @@ parser.add_argument('--input_size', default=300, type=int,
                     help='SSD300 OR SSD512')
 parser.add_argument('--input_size_2', default=56, type=int, help='input size of the second network')
 parser.add_argument('--expand_num', default=3, type=int, help='expand ratio around the license plate')
+parser.add_argument('--object_size', default='all', type=str,
+                    help='which size to test, all, small, medium, large')
 
 args = parser.parse_args()
 
@@ -138,14 +140,14 @@ class Timer(object):
             return self.diff
 
 
-def parse_rec(filename):
+def parse_rec(filename, object_size):
     """ Parse a PASCAL VOC xml file """
     tree = ET.parse(filename)
     objects = []
     for obj in tree.findall('object'):
         obj_struct = {}
-        if obj.find('name').text == 'car':
-            continue
+        # if obj.find('name').text == 'car':
+        #     continue
         obj_struct['name'] = obj.find('name').text
         obj_struct['pose'] = obj.find('pose').text
         obj_struct['truncated'] = int(obj.find('truncated').text)
@@ -163,6 +165,22 @@ def parse_rec(filename):
                             int(bbox.find('y_bottom_right').text) - 1,
                             int(bbox.find('x_bottom_left').text) - 1,
                             int(bbox.find('y_bottom_left').text) - 1]
+
+        x_top_left = int(bbox.find('x_top_left').text) - 1
+        y_top_left = int(bbox.find('y_top_left').text) - 1
+        x_bottom_left = int(bbox.find('x_bottom_left').text) - 1
+        y_bottom_left = int(bbox.find('y_bottom_left').text) - 1
+        x_bottom_right = int(bbox.find('x_bottom_right').text) - 1
+        y_bottom_right = int(bbox.find('y_bottom_right').text) - 1
+
+        QP = np.array([x_top_left - x_bottom_left, y_top_left - y_bottom_left])
+        v = np.array([x_bottom_left - x_bottom_right, y_bottom_left - y_bottom_right])
+        h = np.linalg.norm(np.cross(QP, v))/np.linalg.norm(v)
+        
+        if object_size != 'all':
+            if (h <= 16 and object_size != 'small') or (h > 16 and h <= 32 and object_size != 'medium') or (h > 32 and object_size != 'large'):
+                continue
+
         objects.append(obj_struct)
 
     return objects
@@ -211,7 +229,7 @@ def write_voc_results_file(all_boxes, dataset):
                                    dets[k, 10] + 1, dets[k, 11] + 1))
 
 
-def do_python_eval(output_dir='output', use_07=True):
+def do_python_eval(output_dir='output', use_07=True, object_size='all'):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     aps = []
     # The PASCAL VOC metric changed in 2010
@@ -220,12 +238,12 @@ def do_python_eval(output_dir='output', use_07=True):
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
     for i, cls in enumerate(labelmap):
-        if cls == 'car':
-            continue
+        # if cls == 'car':
+        #     continue
         filename = get_voc_results_file_template(set_type, cls)
         rec, prec, ap = voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
-           ovthresh=0.5, use_07_metric=use_07_metric)
+           ovthresh=0.5, use_07_metric=use_07_metric, object_size=object_size)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
@@ -284,7 +302,7 @@ def voc_eval(detpath,
              classname,
              cachedir,
              ovthresh=0.5,
-             use_07_metric=True):
+             use_07_metric=True, object_size='all'):
     """rec, prec, ap = voc_eval(detpath,
                            annopath,
                            imagesetfile,
@@ -319,7 +337,10 @@ cachedir: Directory for caching the annotations
         # load annots
         recs = {}
         for i, imagename in enumerate(imagenames):
-            recs[imagename] = parse_rec(annopath % (imagename))
+            parse_results = parse_rec(annopath % (imagename), object_size)
+            if parse_results == []:
+                continue
+            recs[imagename] = parse_results
             if i % 100 == 0:
                 print('Reading annotation for {:d}/{:d}'.format(
                    i + 1, len(imagenames)))
@@ -335,7 +356,7 @@ cachedir: Directory for caching the annotations
     # extract gt objects for this class
     class_recs = {}
     npos = 0
-    for imagename in imagenames:
+    for imagename in recs.keys():
         R = [obj for obj in recs[imagename] if obj['name'] == classname]
         bbox = np.array([x['bbox'] for x in R])
         difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
@@ -396,6 +417,9 @@ cachedir: Directory for caching the annotations
         fp_num = np.sum(fp)
         precision = tp_num / (tp_num + fp_num)
         recall = tp_num / float(npos)
+        print("tp_num: " + str(tp_num))
+        print("fp_num: " + str(fp_num))
+        print("total_num: " + str(npos))
         print("precision: %f"%(precision))
         print("recall: %10f"%(recall))
         print("F1: %f"%(2*precision*recall/(precision+recall)))
@@ -417,7 +441,7 @@ cachedir: Directory for caching the annotations
 
 
 def test_net(save_folder, net, cuda, dataset, transform, top_k,
-             im_size=300, thresh=0.05):
+             im_size=300, thresh=0.05, object_size='all'):
     num_images = len(dataset)
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
@@ -433,16 +457,20 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
+        if gt.shape[0] < 1:
+            continue
         x = Variable(im.unsqueeze(0))
         if args.cuda:
             x = x.cuda()
         _t['im_detect'].tic()
         detections = net(x, []).data
+        # delete the 1-dimension, it's the class car
+        detections_carplate = detections[:, [0,2], :, :]
         detect_time = _t['im_detect'].toc(average=False)
 
         # skip j = 0, because it's the background class
-        for j in range(1, detections.size(1)):
-            dets = detections[0, j, :]
+        for j in range(1, detections_carplate.size(1)):
+            dets = detections_carplate[0, j, :]
             mask = dets[:, 0].gt(0.5).expand(13, dets.size(0)).t()
             dets = torch.masked_select(dets, mask).view(-1, 13)
             if dets.size(0) == 0:
@@ -487,7 +515,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    evaluate_detections(all_boxes, output_dir, dataset)
+    evaluate_detections(all_boxes, output_dir, dataset, object_size)
     evaluate_expand_recall(all_expand_boxes)
 
 
@@ -535,9 +563,9 @@ def evaluate_expand_recall(all_expand_boxes):
     print("{}/{}: {:.4f}".format(nrecall, npos, nrecall/npos))
 
 
-def evaluate_detections(box_list, output_dir, dataset):
+def evaluate_detections(box_list, output_dir, dataset, object_size):
     write_voc_results_file(box_list, dataset)
-    do_python_eval(output_dir)
+    do_python_eval(output_dir, object_size=object_size)
 
 
 if __name__ == '__main__':
@@ -547,9 +575,9 @@ if __name__ == '__main__':
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = CAR_CARPLATEDetection(root=args.voc_root,
+    dataset = CARPLATE_FOUR_CORNERSDetection(root=args.voc_root,
                            transform=BaseTransform(args.input_size, dataset_mean),
-                           target_transform=CAR_CARPLATEAnnotationTransform(keep_difficult=True),
+                           target_transform=CARPLATE_FOUR_CORNERSAnnotationTransform(keep_difficult=True, object_size=args.object_size),
                            dataset_name=set_type)
     if args.cuda:
         net = net.cuda()
@@ -557,4 +585,4 @@ if __name__ == '__main__':
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
              BaseTransform(net.size, dataset_mean), args.top_k, args.input_size,
-             thresh=args.confidence_threshold)
+             thresh=args.confidence_threshold, object_size=args.object_size)
