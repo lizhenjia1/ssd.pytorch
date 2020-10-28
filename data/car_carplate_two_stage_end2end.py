@@ -164,7 +164,7 @@ class CAR_CARPLATE_TWO_STAGE_END2ENDDetection(data.Dataset):
         '''
         # 720p, indirect cant, direct can
         # trainval ['001721', '000978', '002153', '004781', '002146', '000049', '005338', '002532']
-        # paper ['001721', '002153', '004781']
+        # paper ['002153', '004781']
         # 1080p, indirect cant, direct can
         # test ['003046']
         img_id = self.ids[index]
