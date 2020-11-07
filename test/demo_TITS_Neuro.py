@@ -29,8 +29,10 @@ from matplotlib import pyplot as plt
 from data import CAR_CARPLATE_TWO_STAGE_END2ENDDetection, CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform, CAR_CARPLATE_TWO_STAGE_END2END_ROOT
 testset = CAR_CARPLATE_TWO_STAGE_END2ENDDetection(CAR_CARPLATE_TWO_STAGE_END2END_ROOT, None, None, CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform(),
                                        dataset_name='test')
-for img_id in range(100):
+for img_id in range(2000):
     image = testset.pull_image(img_id)
+    # if image is None:
+    #     continue
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     x = cv2.resize(image, (args.input_size, args.input_size)).astype(np.float32)
@@ -74,17 +76,17 @@ for img_id in range(100):
                 coords = (pt[0], pt[1]), pt[2] - pt[0] + 1, pt[3] - pt[1] + 1
                 color = colors[i]
                 if i == 1:
-                    currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
+                    currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor='#ffc000', linewidth=2))
                     # currentAxis.text(pt[0], pt[1], display_txt, bbox={'facecolor':color, 'alpha':0.5})
                 
                 if i == 2:
                     lp_pt = (detections[0, i, j, 1:5]*scale).cpu().numpy()
                     lp_coords = (lp_pt[0], lp_pt[1]), lp_pt[2] - lp_pt[0] + 1, lp_pt[3] - lp_pt[1] + 1
-                    currentAxis.add_patch(plt.Rectangle(*lp_coords, fill=False, edgecolor=colors[1], linewidth=2))
+                    # currentAxis.add_patch(plt.Rectangle(*lp_coords, fill=False, edgecolor=colors[1], linewidth=2))
                     four_corners = (detections[0, i, j, 5:]*scale_4).cpu().numpy()
                     corners_x = np.append(four_corners[0::2], four_corners[0])
                     corners_y = np.append(four_corners[1::2], four_corners[1])
-                    currentAxis.plot(corners_x, corners_y, linewidth=2, color=color)
+                    currentAxis.plot(corners_x, corners_y, linewidth=2, color='#ff0000')
     plt.show()
 
 
