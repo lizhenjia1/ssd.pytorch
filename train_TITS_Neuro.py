@@ -341,33 +341,33 @@ def train():
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
 
-            # # load net for evaluation
-            # eval_net = build_ssd('test', cfg['min_dim'], cfg['min_dim_2'], cfg['num_classes'], cfg['expand_num'])  # initialize SSD
-            # eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
-            # eval_net.eval()
-            # print('Finished loading model!')
-            # if args.cuda:
-            #     eval_net = eval_net.cuda()
-            #     cudnn.benchmark = True
-            # # evaluation begin
-            # eval_results.test_net(args.eval_save_folder, args.obj_type, args.eval_dataset_root, 'test',
-            #         labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
-            #         args.input_size, thresh=args.confidence_threshold)
+            # load net for evaluation
+            eval_net = build_ssd('test', cfg['min_dim'], cfg['min_dim_2'], cfg['num_classes'], cfg['expand_num'])  # initialize SSD
+            eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
+            eval_net.eval()
+            print('Finished loading model!')
+            if args.cuda:
+                eval_net = eval_net.cuda()
+                cudnn.benchmark = True
+            # evaluation begin
+            eval_results.test_net(args.eval_save_folder, args.obj_type, args.eval_dataset_root, 'test',
+                    labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
+                    args.input_size, thresh=args.confidence_threshold)
 
     torch.save(ssd_net.state_dict(),
                'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth')
-    # # load net for evaluation for the final model
-    # eval_net = build_ssd('test', cfg['min_dim'], cfg['min_dim_2'], cfg['num_classes'], cfg['expand_num'])  # initialize SSD
-    # eval_net.load_state_dict(torch.load('weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth'))
-    # eval_net.eval()
-    # print('Finished loading model!')
-    # if args.cuda:
-    #     eval_net = eval_net.cuda()
-    #     cudnn.benchmark = True
-    # # evaluation begin
-    # eval_results.test_net(args.eval_save_folder, args.obj_type, args.eval_dataset_root, 'test',
-    #         labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
-    #         args.input_size, thresh=args.confidence_threshold)
+    # load net for evaluation for the final model
+    eval_net = build_ssd('test', cfg['min_dim'], cfg['min_dim_2'], cfg['num_classes'], cfg['expand_num'])  # initialize SSD
+    eval_net.load_state_dict(torch.load('weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth'))
+    eval_net.eval()
+    print('Finished loading model!')
+    if args.cuda:
+        eval_net = eval_net.cuda()
+        cudnn.benchmark = True
+    # evaluation begin
+    eval_results.test_net(args.eval_save_folder, args.obj_type, args.eval_dataset_root, 'test',
+            labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
+            args.input_size, thresh=args.confidence_threshold)
 
 
 def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):

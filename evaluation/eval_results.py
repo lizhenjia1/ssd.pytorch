@@ -374,7 +374,7 @@ def test_net(save_folder, obj_type, voc_root, set_type_, labelmap_, net, cuda, d
         if args_cuda:
             x = x.cuda()
         _t['im_detect'].tic()
-        if obj_type in ['two_stage_end2end', 'two_stage_end2end_with_border']:
+        if obj_type in ['two_stage_end2end', 'two_stage_end2end_with_border', 'TITS_Neuro']:
             detections = net(x, []).data
         else:
             detections = net(x).data
