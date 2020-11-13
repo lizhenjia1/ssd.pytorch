@@ -96,7 +96,7 @@ def compute_iou(pred, gt):
             iou (np.array): intersection over union
     """
     def get_box_area(box):
-        return (box[:, 2] - box[:, 0] + 0.) * (box[:, 3] - box[:, 1] + 0.)
+        return (box[:, 2] - box[:, 0] + 1.) * (box[:, 3] - box[:, 1] + 1.)
 
     _gt = np.tile(gt, (pred.shape[0], 1))
     _pred = np.repeat(pred, gt.shape[0], axis=0)
@@ -106,8 +106,8 @@ def compute_iou(pred, gt):
     ixmax = np.minimum(_gt[:, 2], _pred[:, 2])
     iymax = np.minimum(_gt[:, 3], _pred[:, 3])
 
-    width = np.maximum(ixmax - ixmin + 0., 0)
-    height = np.maximum(iymax - iymin + 0., 0)
+    width = np.maximum(ixmax - ixmin + 1., 0)
+    height = np.maximum(iymax - iymin + 1., 0)
 
     intersection_area = width * height
     union_area = get_box_area(_gt) + get_box_area(_pred) - intersection_area
