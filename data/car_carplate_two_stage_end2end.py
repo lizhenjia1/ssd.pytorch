@@ -14,7 +14,7 @@ CAR_CARPLATE_TWO_STAGE_END2END_CLASSES = (  # always index 0
     'car', )
 
 # note: if you used our download scripts, this should be right
-CAR_CARPLATE_TWO_STAGE_END2END_ROOT = osp.join('/data', 'VALID/720p/car_carplate_two_stage_end2end/VOC/')
+CAR_CARPLATE_TWO_STAGE_END2END_ROOT = osp.join('/data', 'TILT/720p/car_carplate_two_stage_end2end/')
 
 
 class CAR_CARPLATE_TWO_STAGE_END2ENDAnnotationTransform(object):
@@ -162,6 +162,11 @@ class CAR_CARPLATE_TWO_STAGE_END2ENDDetection(data.Dataset):
         Return:
             PIL img
         '''
+        # 720p, indirect cant, direct can
+        # trainval ['001721', '000978', '002153', '004781', '002146', '000049', '005338', '002532']
+        # paper ['002153', '004781']
+        # 1080p, indirect cant, direct can
+        # test ['003046']
         img_id = self.ids[index]
         return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
 

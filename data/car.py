@@ -14,7 +14,7 @@ CAR_CLASSES = (  # always index 0
     'car', )
 
 # note: if you used our download scripts, this should be right
-CAR_ROOT = osp.join('/data', "VALID/720p/car_only/VOC/")
+CAR_ROOT = osp.join('/data', "TILT/720p/car_only/")
 
 
 class CARAnnotationTransform(object):

@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python train_two_branch.py --dataset CAR_CARPLATE_TWO_BRANCH --dataset_root /data/VALID/720p/car_carplate/VOC --save_folder car_carplate_two_branch_weights/ --lr 1e-4 --visdom True --batch_size 32
+CUDA_VISIBLE_DEVICES=3 python train_two_branch.py --dataset CAR_CARPLATE_TWO_BRANCH --dataset_root /data/VALID/720p/car_carplate/VOC --save_folder car_carplate_two_branch_weights/ --input_size 300 --lr 1e-4 --visdom True --batch_size 32 --obj_type two_branch

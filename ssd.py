@@ -3,9 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import voc, coco, car, carplate, car_carplate
+from data import voc, coco, car, carplate, car_carplate, change_cfg_for_ssd512
 import os
-from data import *
 
 
 class SSD(nn.Module):
@@ -34,7 +33,8 @@ class SSD(nn.Module):
         if size == 512:
             self.cfg = change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)
-        self.priors = Variable(self.priorbox.forward(), volatile=True)
+        with torch.no_grad():
+            self.priors = Variable(self.priorbox.forward())
         self.size = size
 
         # SSD network
@@ -149,7 +149,7 @@ def vgg(cfg, i, batch_norm=False):
     return layers
 
 
-def add_extras(cfg, i, batch_norm=False):
+def add_extras(cfg, size, i, batch_norm=False):
     # Extra layers added to VGG for feature scaling
     layers = []
     in_channels = i
@@ -160,12 +160,13 @@ def add_extras(cfg, i, batch_norm=False):
                 layers += [nn.Conv2d(in_channels, cfg[k + 1],
                            kernel_size=(1, 3)[flag], stride=2, padding=1)]
             else:
-                if k == 11:
-                    layers += [nn.Conv2d(in_channels, v, kernel_size=4)]
-                else:
-                    layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
+                layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
             flag = not flag
         in_channels = v
+    # SSD512 need add two more Conv layer
+    if size == 512:
+        layers += [nn.Conv2d(in_channels, 128, kernel_size=1, stride=1)]
+        layers += [nn.Conv2d(128, 256, kernel_size=4, stride=1, padding=1)]
     return layers
 
 
@@ -194,10 +195,10 @@ base = {
 }
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
-    '512': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256, 128, 256],
+    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256],
 }
 mbox = {
-    '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
+    '300': [4, 6, 6, 6, 4, 4],
     '512': [4, 6, 6, 6, 6, 4, 4],
 }
 
@@ -211,7 +212,7 @@ def build_ssd(phase, size=300, num_classes=21):
               "currently only SSD300 SSD512 (size=300 or size=512) is supported!")
         return
     base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
-                                     add_extras(extras[str(size)], 1024),
+                                     add_extras(extras[str(size)], size, 1024),
                                      mbox[str(size)], num_classes)
     return SSD(phase, size, base_, extras_, head_, num_classes)
 

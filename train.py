@@ -15,6 +15,8 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 from torchsummary import summary
+from log import log
+from evaluation import eval_results
 
 
 def str2bool(v):
@@ -53,6 +55,15 @@ parser.add_argument('--visdom', default=False, type=str2bool,
 parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
 parser.add_argument('--input_size', default=300, type=int, help='SSD300 or SSD512')
+# ------------------------evaluation-------------------------------------------
+parser.add_argument('--top_k', default=200, type=int,
+                    help='Maximum number of predicted results')
+parser.add_argument('--confidence_threshold', default=0.01, type=float,
+                    help='Minimum threshold of preserved results')
+parser.add_argument('--eval_save_folder', default='eval/',
+                    help='File path to save results')
+parser.add_argument('--obj_type', default='VOC', choices=['VOC', 'COCO', 'car_carplate', 'car', 'carplate'],
+                    type=str, help='VOC or COCO')
 args = parser.parse_args()
 
 
@@ -82,6 +93,12 @@ def train():
         dataset = COCODetection(root=args.dataset_root,
                                 transform=SSDAugmentation(cfg['min_dim'],
                                                           MEANS))
+        from data import COCO_CLASSES as labelmap
+        eval_dataset = COCODetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, MEANS),
+                           target_transform=COCOAnnotationTransform(),
+                           dataset_name='test')
+
     elif args.dataset == 'VOC':
         if args.dataset_root == COCO_ROOT:
             parser.error('Must specify dataset if specifying dataset_root')
@@ -91,6 +108,11 @@ def train():
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
+        from data import VOC_CLASSES as labelmap
+        eval_dataset = VOCDetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, MEANS),
+                           target_transform=VOCAnnotationTransform(keep_difficult=True),
+                           dataset_name='test')
 
     elif args.dataset == 'CAR_CARPLATE':
         cfg = car_carplate
@@ -100,6 +122,11 @@ def train():
                                         transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
                                         dataset_name='trainval')
+        from data import CAR_CARPLATE_CLASSES as labelmap
+        eval_dataset = CAR_CARPLATEDetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, MEANS),
+                           target_transform=CAR_CARPLATEAnnotationTransform(keep_difficult=True),
+                           dataset_name='test')
 
     elif args.dataset == 'CAR':
         cfg = car
@@ -109,6 +136,11 @@ def train():
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
                                dataset_name='trainval')
+        from data import CAR_CLASSES as labelmap
+        eval_dataset = CARDetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, MEANS),
+                           target_transform=CARAnnotationTransform(keep_difficult=True),
+                           dataset_name='test')
 
     elif args.dataset == 'CARPLATE':
         cfg = carplate
@@ -118,6 +150,11 @@ def train():
                                     transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS),
                                     dataset_name='trainval')
+        from data import CARPLATE_CLASSES as labelmap
+        eval_dataset = CARPLATEDetection(root=args.dataset_root,
+                           transform=BaseTransform(args.input_size, MEANS),
+                           target_transform=CARPLATEAnnotationTransform(keep_difficult=True),
+                           dataset_name='test')
 
 
     if args.visdom:
@@ -184,6 +221,8 @@ def train():
                                   num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate,
                                   pin_memory=True)
+
+    lr = args.lr
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
@@ -197,7 +236,7 @@ def train():
 
         if iteration in cfg['lr_steps']:
             step_index += 1
-            adjust_learning_rate(optimizer, args.gamma, step_index)
+            lr = adjust_learning_rate(optimizer, args.gamma, epoch, step_index, iteration, epoch_size)
 
         # load train data
         try:
@@ -208,10 +247,12 @@ def train():
 
         if args.cuda:
             images = Variable(images.cuda())
-            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            with torch.no_grad():
+                targets = [Variable(ann.cuda()) for ann in targets]
         else:
             images = Variable(images)
-            targets = [Variable(ann, volatile=True) for ann in targets]
+            with torch.no_grad():
+                targets = [Variable(ann) for ann in targets]
         # forward
         t0 = time.time()
         out = net(images)
@@ -222,38 +263,72 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
+        loc_loss += loss_l.item()
+        conf_loss += loss_c.item()
 
-        if iteration % 10 == 0:
-            print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+        if iteration % 100 == 0:
+            log.l.info('''
+                Timer: {:.5f} sec.\t LR: {}.\t Iter: {}.\t Loss_l: {:.5f}.\t Loss_c: {:.5f}.\t Loss: {:.5f}.
+                '''.format((t1-t0), lr, iteration, loss_l.item(), loss_c.item(),
+                loss_l.item() + loss_c.item()))
 
         if args.visdom:
-            update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
+            update_vis_plot(iteration, loss_l.item(), loss_c.item(),
                             iter_plot, epoch_plot, 'append')
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd300_' +
-                       repr(iteration) + '.pth')
+            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
+            str(args.input_size) + '_' + repr(iteration) + '.pth')
+
+            # load net for evaluation
+            num_classes = len(labelmap) + 1  # +1 for background
+            eval_net = build_ssd('test', args.input_size, num_classes)  # initialize SSD
+            eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
+            eval_net.eval()
+            print('Finished loading model!')
+            if args.cuda:
+                eval_net = eval_net.cuda()
+                cudnn.benchmark = True
+            # evaluation begin
+            eval_results.test_net(args.eval_save_folder, args.obj_type, args.dataset_root, 'test',
+                    labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
+                    args.input_size, thresh=args.confidence_threshold)
+
     torch.save(ssd_net.state_dict(),
-               'weights/' + args.save_folder + '' + args.dataset + '.pth')
+               'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth')
+    # load net for evaluation for the final model
+    num_classes = len(labelmap) + 1  # +1 for background
+    eval_net = build_ssd('test', args.input_size, num_classes)  # initialize SSD
+    eval_net.load_state_dict(torch.load('weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth'))
+    eval_net.eval()
+    print('Finished loading model!')
+    if args.cuda:
+        eval_net = eval_net.cuda()
+        cudnn.benchmark = True
+    # evaluation begin
+    eval_results.test_net(args.eval_save_folder, args.obj_type, args.dataset_root, 'test',
+            labelmap, eval_net, args.cuda, eval_dataset, BaseTransform(eval_net.size, MEANS), args.top_k,
+            args.input_size, thresh=args.confidence_threshold)
 
 
-def adjust_learning_rate(optimizer, gamma, step):
+def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):
     """Sets the learning rate to the initial LR decayed by 10 at every
         specified step
     # Adapted from PyTorch Imagenet example:
     # https://github.com/pytorch/examples/blob/master/imagenet/main.py
     """
-    lr = args.lr * (gamma ** (step))
+    if epoch < 6:
+        lr = 1e-6 + (args.lr-1e-6) * iteration / (epoch_size * 5) 
+    else:
+        lr = args.lr * (gamma ** (step_index))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def xavier(param):
-    init.xavier_uniform(param)
+    init.xavier_uniform_(param)
 
 
 def weights_init(m):

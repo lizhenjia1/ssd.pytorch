@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python train.py --dataset CARPLATE --dataset_root /data/VALID/720p/carplate_only/VOC --save_folder carplate_weights/ --lr 1e-4 --visdom True --batch_size 32
+CUDA_VISIBLE_DEVICES=1,2,3 python train.py --dataset CARPLATE --dataset_root /data/CCPD/VOC --save_folder CCPD_carplate_bbox_weights/ --input_size 300 --lr 1e-4 --visdom True --batch_size 32 --obj_type carplate

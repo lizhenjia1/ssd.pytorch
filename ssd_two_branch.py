@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import car_branch, carplate_branch
+from data import car_branch, carplate_branch, change_cfg_for_ssd512
 import os
 
 
-class SSD(nn.Module):
+class SSD_two_branch(nn.Module):
     """Single Shot Multibox Architecture
     The network is composed of a base VGG network followed by the
     added multibox conv layers.  Each multibox layer branches into
@@ -26,15 +26,20 @@ class SSD(nn.Module):
     """
 
     def __init__(self, phase, size, base, extras, car_head, carplate_head, num_classes):
-        super(SSD, self).__init__()
+        super(SSD_two_branch, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
         self.car_cfg = car_branch
         self.carplate_cfg = carplate_branch
+        if size == 512:
+            self.car_cfg = change_cfg_for_ssd512(self.car_cfg)
+            self.carplate_cfg = change_cfg_for_ssd512(self.carplate_cfg)
         self.car_priorbox = PriorBox(self.car_cfg)
         self.carplate_priorbox = PriorBox(self.carplate_cfg)
-        self.car_priors = Variable(self.car_priorbox.forward(), volatile=True)
-        self.carplate_priors = Variable(self.carplate_priorbox.forward(), volatile=True)
+        with torch.no_grad():
+            self.car_priors = Variable(self.car_priorbox.forward())
+        with torch.no_grad():
+            self.carplate_priors = Variable(self.carplate_priorbox.forward())
         self.size = size
 
         # SSD network
@@ -100,6 +105,7 @@ class SSD(nn.Module):
             x = F.relu(v(x), inplace=True)
             if k % 2 == 1:
                 car_sources.append(x)
+                carplate_sources.append(x)
 
         # apply multibox head to source layers
         for (x, l, c) in zip(car_sources, self.car_loc, self.car_conf):
@@ -118,17 +124,19 @@ class SSD(nn.Module):
         carplate_conf = torch.cat([o.view(o.size(0), -1) for o in carplate_conf], 1)
 
         if self.phase == "test":
-            output = self.detect(
+            output1 = self.detect(
                 car_loc.view(car_loc.size(0), -1, 4),           # loc preds
                 self.softmax(car_conf.view(car_conf.size(0), -1,
                              self.num_classes)),                # conf preds
                 self.car_priors.type(type(x.data)),             # default boxes
-                
+            )
+            output2 = self.detect(
                 carplate_loc.view(carplate_loc.size(0), -1, 4), # loc preds
                 self.softmax(carplate_conf.view(carplate_conf.size(0), -1,
                                            self.num_classes)),  # conf preds
                 self.carplate_priors.type(type(x.data))         # default boxes
             )
+            output = torch.cat((output1, output2[:,1,:,:].unsqueeze(1)), 1)
         else:
             output = (
                 car_loc.view(car_loc.size(0), -1, 4),
@@ -176,7 +184,7 @@ def vgg(cfg, i, batch_norm=False):
     return layers
 
 
-def add_extras(cfg, i, batch_norm=False):
+def add_extras(cfg, size, i, batch_norm=False):
     # Extra layers added to VGG for feature scaling
     layers = []
     in_channels = i
@@ -190,6 +198,10 @@ def add_extras(cfg, i, batch_norm=False):
                 layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
             flag = not flag
         in_channels = v
+    # SSD512 need add two more Conv layer
+    if size == 512:
+        layers += [nn.Conv2d(in_channels, 128, kernel_size=1, stride=1)]
+        layers += [nn.Conv2d(128, 256, kernel_size=4, stride=1, padding=1)]
     return layers
 
 
@@ -215,6 +227,11 @@ def multibox(vgg, extra_layers, cfg, num_classes):
                                  * 4, kernel_size=3, padding=1)]
         car_conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
+    for k, v in enumerate(extra_layers[1::2], 2):
+        carplate_loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
+                                 * 4, kernel_size=3, padding=1)]
+        carplate_conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
+                                  * num_classes, kernel_size=3, padding=1)]
     
     return vgg, extra_layers, (car_loc_layers, car_conf_layers), (carplate_loc_layers, carplate_conf_layers)
 
@@ -222,15 +239,16 @@ def multibox(vgg, extra_layers, cfg, num_classes):
 base = {
     '300': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
             512, 512, 512],
-    '512': [],
+    '512': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
+            512, 512, 512],
 }
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
-    '512': [],
+    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256],
 }
 mbox = {
-    '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
-    '512': [],
+    '300': [4, 6, 6, 6, 4, 4],
+    '512': [4, 6, 6, 6, 6, 4, 4],
 }
 
 
@@ -238,11 +256,11 @@ def build_ssd(phase, size=300, num_classes=21):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300:
+    if size != 300 and size != 512:
         print("ERROR: You specified size " + repr(size) + ". However, " +
-              "currently only SSD300 (size=300) is supported!")
+              "currently only SSD300 SSD512 (size=300 or size=512) is supported!")
         return
     base_, extras_, car_head_, carplate_head_ = multibox(vgg(base[str(size)], 3),
-                                     add_extras(extras[str(size)], 1024),
+                                     add_extras(extras[str(size)], size, 1024),
                                      mbox[str(size)], num_classes)
-    return SSD(phase, size, base_, extras_, car_head_, carplate_head_, num_classes)
+    return SSD_two_branch(phase, size, base_, extras_, car_head_, carplate_head_, num_classes)

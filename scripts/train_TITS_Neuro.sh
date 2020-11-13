@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1,2,3 python train_TITS_Neuro.py --dataset TITS_Neuro --dataset_root /data/TILT/720p/car_carplate_two_stage_end2end/ --save_folder TITS_Neuro_weights/ --input_size 512 --lr 1e-4 --visdom True --batch_size 32 --obj_type TITS_Neuro --eval_dataset_root /data/TILT/720p/car_carplate --num_workers 3
