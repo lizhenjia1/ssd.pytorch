@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1,2,3 python train_only_four_corners.py --dataset CARPLATE_ONLY_FOUR_CORNERS --dataset_root /data/CCPD/VOC --save_folder CCPD_carplate_only_four_corners_weights/ --input_size 300 --lr 1e-4 --visdom True --batch_size 32 --obj_type carplate_only_four_corners

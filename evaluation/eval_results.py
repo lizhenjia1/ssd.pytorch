@@ -23,7 +23,7 @@ import numpy as np
 import pickle
 import cv2
 from log import log
-from mean_average_precision import MetricBuilder
+from evaluation.mean_average_precision import MetricBuilder
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -307,17 +307,19 @@ def test_net(save_folder, obj_type, voc_root, set_type_, labelmap_, net, cuda, d
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):
             dets = detections[0, j, :]
-            if obj_type in ['VOC', 'COCO', 'car', 'carplate', 'car_carplate', 'two_branch']: 
+            if obj_type in ['VOC', 'COCO', 'car', 'carplate', 'car_carplate', 'two_branch']:
                 mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
                 dets = torch.masked_select(dets, mask).view(-1, 5)
             elif obj_type == 'car_carplate_offset':
                 mask = dets[:, 0].gt(0.).expand(10, dets.size(0)).t()
                 dets = torch.masked_select(dets, mask).view(-1, 10)
-            elif obj_type in ['carplate_four_corners', 'carplate_four_corners_with_border', 'two_stage_end2end', 'two_stage_end2end_with_border', 'TITS_Neuro']:
+            elif obj_type in ['carplate_four_corners', 'carplate_only_four_corners',
+                                'carplate_four_corners_with_border', 'two_stage_end2end',
+                                'two_stage_end2end_with_border', 'TITS_Neuro']:
                 mask = dets[:, 0].gt(0.).expand(13, dets.size(0)).t()
                 dets = torch.masked_select(dets, mask).view(-1, 13)
             else:
-                assert "wrong object type"
+                assert False, "wrong object type"
             if dets.size(0) == 0:
                 continue
             boxes = dets[:, 1:5]
