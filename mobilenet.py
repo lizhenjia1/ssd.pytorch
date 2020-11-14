@@ -1,5 +1,3 @@
-# borrowed from "https://github.com/marvis/pytorch-mobilenet"
-
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -27,7 +25,7 @@ class MobileNetV1(nn.Module):
             )
 
         self.model = nn.Sequential(
-            conv_bn(3, 32, 1),
+            conv_bn(3, 32, 2),
             conv_dw(32, 64, 1),
             conv_dw(64, 128, 2),
             conv_dw(128, 128, 1),
@@ -42,11 +40,11 @@ class MobileNetV1(nn.Module):
             conv_dw(512, 1024, 2),
             conv_dw(1024, 1024, 1),
         )
-        self.fc = nn.Linear(1024, num_classes)
+        # self.fc = nn.Linear(1024, num_classes)
 
     def forward(self, x):
         x = self.model(x)
-        x = F.avg_pool2d(x, 7)
-        x = x.view(-1, 1024)
-        x = self.fc(x)
+        # x = F.avg_pool2d(x, 7)
+        # x = x.view(-1, 1024)
+        # x = self.fc(x)
         return x

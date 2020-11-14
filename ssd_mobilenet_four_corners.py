@@ -8,7 +8,7 @@ import os
 import mobilenet
 
 
-class SSD_four_corners(nn.Module):
+class SSD_mobilenet_four_corners(nn.Module):
     """Single Shot Multibox Architecture
     The network is composed of a base VGG network followed by the
     added multibox conv layers.  Each multibox layer branches into
@@ -27,7 +27,7 @@ class SSD_four_corners(nn.Module):
     """
 
     def __init__(self, phase, size, base, extras, head, num_classes):
-        super(SSD_four_corners, self).__init__()
+        super(SSD_mobilenet_four_corners, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = carplate_four_corners
