@@ -16,9 +16,6 @@ sys.path.append(".")
 from data import CARPLATE_FOUR_CORNERSDetection, CARPLATE_FOUR_CORNERSAnnotationTransform, CARPLATE_FOUR_CORNERS_ROOT, BaseTransform
 from data import CARPLATE_FOUR_CORNERS_CLASSES as labelmap
 import torch.utils.data as data
-
-from ssd_four_corners import build_ssd
-
 import sys
 import os
 import time
@@ -60,8 +57,17 @@ parser.add_argument('--input_size', default=300, type=int,
                     help='SSD300 OR SSD512')
 parser.add_argument('--iou_thres', default=0.5, type=float,
                     help='IoU threshold VOC2012')
+parser.add_argument('--obj_type', default='carplate_four_corners', choices=['carplate_four_corners', 'carplate_only_four_corners'],
+                    type=str, help='four corners')
 
 args = parser.parse_args()
+
+if args.obj_type == "carplate_four_corners":
+    from ssd_four_corners import build_ssd
+    print("carplate_four_corners")
+elif args.obj_type == "carplate_only_four_corners":
+    from ssd_only_four_corners import build_ssd
+    print("carplate_only_four_corners")
 
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
