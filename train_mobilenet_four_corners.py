@@ -1,7 +1,7 @@
 from data import *
 from utils.augmentations import SSDAugmentation_four_corners
 from layers.modules import MultiBoxLoss_four_corners
-from ssd_mobile_four_corners import build_ssd
+from ssd_mobilenet_four_corners import build_ssd
 import os
 import sys
 import time
@@ -22,26 +22,27 @@ from evaluation import eval_results
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
+
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
 parser.add_argument('--dataset', default='CARPLATE_FOUR_CORNERS', choices=['CARPLATE_FOUR_CORNERS'],
                     type=str, help='CARPLATE_FOUR_CORNERS')
-parser.add_argument('--dataset_root', default="VOC",
+parser.add_argument('--dataset_root', default=VOC_ROOT,
                     help='Dataset root directory path')
-parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
+parser.add_argument('--basenet', default='mobilenet-v1-ssd-mp-0_675.pth',
                     help='Pretrained base model')
 parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch size for training')
-parser.add_argument('--resume', default='', type=str,
+parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from')
 parser.add_argument('--start_iter', default=0, type=int,
                     help='Resume training at this iter')
-parser.add_argument('--num_workers', default=1, type=int,
+parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
                     help='Momentum value for optim')
@@ -51,9 +52,9 @@ parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
 parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
-parser.add_argument('--save_folder', default='mobile',
+parser.add_argument('--save_folder', default='voc_weights/',
                     help='Directory for saving checkpoint models')
-parser.add_argument('--input_size', default=512, type=int, help='SSD300 or SSD512')
+parser.add_argument('--input_size', default=300, type=int, help='SSD300 or SSD512')
 # ------------------------evaluation-------------------------------------------
 parser.add_argument('--top_k', default=200, type=int,
                     help='Maximum number of predicted results')
@@ -104,20 +105,22 @@ def train():
     net = ssd_net
 
     # summary
-    print(cfg['min_dim'])
     summary(net, input_size=(3, int(cfg['min_dim']), int(cfg['min_dim'])))
 
     if args.cuda:
         net = torch.nn.DataParallel(ssd_net)
         cudnn.benchmark = True
 
-    # if args.resume:
-    #     print('Resuming training, loading {}...'.format(args.resume))
-    #     ssd_net.load_weights(args.resume)
-    # else:
-    #     vgg_weights = torch.load('weights/' + args.basenet)
-    #     print('Loading base network...')
-        # ssd_net.vgg.load_state_dict(vgg_weights)
+    if args.resume:
+        print('Resuming training, loading {}...'.format(args.resume))
+        ssd_net.load_weights(args.resume)
+    else:
+        mobilenet_weights = torch.load('weights/' + args.basenet)
+        base_net_weights = {".".join(k.split('.')[1:]):v for k, v in mobilenet_weights.items() if 'base_net' in k}
+        extras_weights = {".".join(k.split('.')[1:]):v for k, v in mobilenet_weights.items() if 'extras' in k}
+        print('Loading base network...')
+        ssd_net.base_net.load_state_dict(base_net_weights)
+        ssd_net.extras.load_state_dict(extras_weights)
 
     if args.cuda:
         net = net.cuda()
@@ -125,7 +128,6 @@ def train():
     if not args.resume:
         print('Initializing weights...')
         # initialize newly added layers' weights with xavier method
-        ssd_net.extras.apply(weights_init)
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
         ssd_net.four_corners.apply(weights_init)
@@ -166,7 +168,7 @@ def train():
     lr = args.lr
     # create batch iterator
     batch_iterator = iter(data_loader)
-    for iteration in range(args.start_iter, 200000):
+    for iteration in range(args.start_iter, cfg['max_iter']):
         if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
             epoch += 1
             update_vis_plot(epoch, loc_loss, conf_loss, four_corners_loss, epoch_plot, None,
@@ -219,12 +221,10 @@ def train():
             update_vis_plot(iteration, loss_l.item(), loss_c.item(), loss_four_corners.item(),
             iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 1000 == 0:
+        if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
-            if iteration % 118000 != 0:
-                continue
 
             # load net for evaluation
             num_classes = len(labelmap) + 1  # +1 for background

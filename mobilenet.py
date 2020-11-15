@@ -21,7 +21,7 @@ class MobileNetV1(nn.Module):
 
                 nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(oup),
-                nn.ReLU(inplace=True),
+                nn.ReLU(inplace=True)
             )
 
         self.model = nn.Sequential(
@@ -38,13 +38,39 @@ class MobileNetV1(nn.Module):
             conv_dw(512, 512, 1),
             conv_dw(512, 512, 1),
             conv_dw(512, 1024, 2),
-            conv_dw(1024, 1024, 1),
+            conv_dw(1024, 1024, 1)
         )
-        # self.fc = nn.Linear(1024, num_classes)
+        self.extras = nn.Sequential(
+            nn.Sequential(
+                nn.Conv2d(in_channels=1024, out_channels=256, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            ),
+            nn.Sequential(
+                nn.Conv2d(in_channels=512, out_channels=128, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            ),
+            nn.Sequential(
+                nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            ),
+            nn.Sequential(
+                nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            )
+        )
+        self.fc = nn.Linear(1024, num_classes)
 
     def forward(self, x):
         x = self.model(x)
-        # x = F.avg_pool2d(x, 7)
-        # x = x.view(-1, 1024)
-        # x = self.fc(x)
+        x = F.avg_pool2d(x, 7)
+        x = x.view(-1, 1024)
+        x = self.fc(x)
         return x
