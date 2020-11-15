@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import carplate_four_corners, change_cfg_for_ssd512
+from data import mobilenet_carplate_four_corners, change_cfg_for_ssd512_mobilenet
 import os
 from mobilenet import MobileNetV1
 
@@ -30,9 +30,9 @@ class SSD_mobilenet_four_corners(nn.Module):
         super(SSD_mobilenet_four_corners, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.cfg = carplate_four_corners
+        self.cfg = mobilenet_carplate_four_corners
         if size == 512:
-            self.cfg = change_cfg_for_ssd512(self.cfg)
+            self.cfg = change_cfg_for_ssd512_mobilenet(self.cfg)
         self.priorbox = PriorBox(self.cfg)
         with torch.no_grad():
             self.priors = Variable(self.priorbox.forward())
