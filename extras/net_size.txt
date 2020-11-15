@@ -1,0 +1,47 @@
+MobileNetV1-SSD300 carplate_four_corners
+
+Total params: 7,795,896
+Trainable params: 7,795,896
+Non-trainable params: 0
+----------------------------------------------------------------
+Input size (MB): 1.03
+Forward/backward pass size (MB): 211.10
+Params size (MB): 29.74
+Estimated Total Size (MB): 241.87
+----------------------------------------------------------------
+
+MobileNetV1-SSD512 carplate_four_corners
+
+Total params: 7,795,896
+Trainable params: 7,795,896
+Non-trainable params: 0
+----------------------------------------------------------------
+Input size (MB): 3.00
+Forward/backward pass size (MB): 605.62
+Params size (MB): 29.74
+Estimated Total Size (MB): 638.36
+----------------------------------------------------------------
+
+VGG-SSD300 carplate_four_corners
+
+Total params: 24,815,204
+Trainable params: 24,815,204
+Non-trainable params: 0
+----------------------------------------------------------------
+Input size (MB): 1.03
+Forward/backward pass size (MB): 413.16
+Params size (MB): 94.66
+Estimated Total Size (MB): 508.86
+----------------------------------------------------------------
+
+VGG-SSD512 carplate_four_corners
+
+Total params: 25,566,264
+Trainable params: 25,566,264
+Non-trainable params: 0
+----------------------------------------------------------------
+Input size (MB): 3.00
+Forward/backward pass size (MB): 1198.12
+Params size (MB): 97.53
+Estimated Total Size (MB): 1298.65
+----------------------------------------------------------------
