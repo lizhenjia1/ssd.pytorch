@@ -223,13 +223,13 @@ def train():
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'ssd' + 
+            torch.save(ssd_net.state_dict(), 'weights/' + args.save_folder + 'mobilenet_ssd' + 
             str(args.input_size) + '_' + repr(iteration) + '.pth')
 
             # load net for evaluation
             num_classes = len(labelmap) + 1  # +1 for background
             eval_net = build_ssd('test', args.input_size, num_classes)  # initialize SSD
-            eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
+            eval_net.load_state_dict(torch.load('weights/' + args.save_folder + 'mobilenet_ssd' + str(args.input_size) + '_' + repr(iteration) + '.pth'))
             eval_net.eval()
             print('Finished loading model!')
             if args.cuda:
@@ -241,11 +241,11 @@ def train():
                     args.input_size, thresh=args.confidence_threshold)
 
     torch.save(ssd_net.state_dict(),
-               'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth')
+               'weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '_mobilenet' + '.pth')
     # load net for evaluation for the final model
     num_classes = len(labelmap) + 1  # +1 for background
     eval_net = build_ssd('test', args.input_size, num_classes)  # initialize SSD
-    eval_net.load_state_dict(torch.load('weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '.pth'))
+    eval_net.load_state_dict(torch.load('weights/' + args.save_folder + '' + args.dataset + str(args.input_size) + '_mobilenet' + '.pth'))
     eval_net.eval()
     print('Finished loading model!')
     if args.cuda:
