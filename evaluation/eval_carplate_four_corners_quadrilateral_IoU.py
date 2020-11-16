@@ -216,13 +216,13 @@ def write_voc_results_file(all_boxes, dataset):
                 # the VOCdevkit expects 1-based indices
                 for k in range(dets.shape[0]):
                     f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
-                                format(index[1], dets[k, -1],
-                                    dets[k, 0] + 1, dets[k, 1] + 1,
-                                    dets[k, 2] + 1, dets[k, 3] + 1,
-                                    dets[k, 4] + 1, dets[k, 5] + 1,
-                                    dets[k, 6] + 1, dets[k, 7] + 1,
-                                    dets[k, 8] + 1, dets[k, 9] + 1,
-                                    dets[k, 10] + 1, dets[k, 11] + 1))
+                            format(index[1], dets[k, -1],
+                            dets[k, 0] + 1, dets[k, 1] + 1,
+                            dets[k, 2] + 1, dets[k, 3] + 1,
+                            dets[k, 4] + 1, dets[k, 5] + 1,
+                            dets[k, 6] + 1, dets[k, 7] + 1,
+                            dets[k, 8] + 1, dets[k, 9] + 1,
+                            dets[k, 10] + 1, dets[k, 11] + 1))
 
 
 def do_python_eval(output_dir='output', use_07=True, object_size='all'):
