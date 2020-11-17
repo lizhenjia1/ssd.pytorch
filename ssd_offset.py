@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import car_carplate_offset, change_cfg_for_ssd512
+from data import car, change_cfg_for_ssd512
 import os
 
 
@@ -29,7 +29,7 @@ class SSD_offset(nn.Module):
         super(SSD_offset, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.cfg = car_carplate_offset
+        self.cfg = car
         if size == 512:
             self.cfg = change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)

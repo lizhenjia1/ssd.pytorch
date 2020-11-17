@@ -83,7 +83,7 @@ if not os.path.exists('weights/' + args.save_folder):
 
 def train():
     if args.dataset == 'CARPLATE_ONLY_FOUR_CORNERS':
-        cfg = carplate_four_corners
+        cfg = carplate
         if args.input_size == 512:
             cfg = change_cfg_for_ssd512(cfg)
         dataset = CARPLATE_FOUR_CORNERSDetection(root=args.dataset_root,

@@ -83,7 +83,7 @@ if not os.path.exists('weights/' + args.save_folder):
 
 def train():
     if args.dataset == 'CAR_CARPLATE_OFFSET':
-        cfg = car_carplate_offset
+        cfg = car
         if args.input_size == 512:
             cfg = change_cfg_for_ssd512(cfg)
         dataset = CAR_CARPLATE_OFFSETDetection(root=args.dataset_root,

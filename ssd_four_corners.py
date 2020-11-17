@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import carplate_four_corners, change_cfg_for_ssd512
+from data import carplate, change_cfg_for_ssd512
 import os
 
 
@@ -29,7 +29,7 @@ class SSD_four_corners(nn.Module):
         super(SSD_four_corners, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.cfg = carplate_four_corners
+        self.cfg = carplate
         if size == 512:
             self.cfg = change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)

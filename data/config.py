@@ -1,7 +1,3 @@
-# for making bounding boxes pretty
-COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
-          (0, 255, 255, 128), (255, 0, 255, 128), (255, 255, 0, 128))
-
 MEANS = (104, 117, 123)
 
 
@@ -99,67 +95,7 @@ carplate = {
     'name': 'CARPLATE',
 }
 
-car_branch = {
-    'num_classes': 2,
-    'lr_steps': (20000, 40000, 60000),
-    'max_iter': 60000,
-    'feature_maps': [38, 19, 10, 5, 3, 1],
-    'min_dim': 300,
-    'steps': [8, 16, 32, 64, 100, 300],
-    'min_sizes': [30.0, 60.0, 111.0, 162.0, 213.0, 264.0],
-    'max_sizes': [60.0, 111.0, 162.0, 213.0, 264.0, 315.0],
-    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
-    'variance': [0.1, 0.2],
-    'clip': True,
-    'name': 'CAR_BRANCH',
-}
-
-carplate_branch = {
-    'num_classes': 2,
-    'lr_steps': (20000, 40000, 60000),
-    'max_iter': 60000,
-    'feature_maps': [38, 19, 10, 5, 3, 1],
-    'min_dim': 300,
-    'steps': [8, 16, 32, 64, 100, 300],
-    'min_sizes': [30.0, 60.0, 111.0, 162.0, 213.0, 264.0],
-    'max_sizes': [60.0, 111.0, 162.0, 213.0, 264.0, 315.0],
-    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
-    'variance': [0.1, 0.2],
-    'clip': True,
-    'name': 'CARPLATE_BRANCH',
-}
-
-car_carplate_offset = {
-    'num_classes': 2,
-    'lr_steps': (20000, 40000, 60000),
-    'max_iter': 60000,
-    'feature_maps': [38, 19, 10, 5, 3, 1],
-    'min_dim': 300,
-    'steps': [8, 16, 32, 64, 100, 300],
-    'min_sizes': [30.0, 60.0, 111.0, 162.0, 213.0, 264.0],
-    'max_sizes': [60.0, 111.0, 162.0, 213.0, 264.0, 315.0],
-    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
-    'variance': [0.1, 0.2],
-    'clip': True,
-    'name': 'CAR_CARPLATE_OFFSET',
-}
-
-carplate_four_corners = {
-    'num_classes': 2,
-    'lr_steps': (20000, 40000, 60000),
-    'max_iter': 60000,
-    'feature_maps': [38, 19, 10, 5, 3, 1],
-    'min_dim': 300,
-    'steps': [8, 16, 32, 64, 100, 300],
-    'min_sizes': [30.0, 60.0, 111.0, 162.0, 213.0, 264.0],
-    'max_sizes': [60.0, 111.0, 162.0, 213.0, 264.0, 315.0],
-    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
-    'variance': [0.1, 0.2],
-    'clip': True,
-    'name': 'CARPLATE_FOUR_CORNERS',
-}
-
-mobilenet_carplate_four_corners = {
+mobilenet_carplate = {
     'num_classes': 2,
     'lr_steps': (20000, 40000, 60000),
     'max_iter': 60000,
@@ -171,7 +107,7 @@ mobilenet_carplate_four_corners = {
     'aspect_ratios': [[2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3]],
     'variance': [0.1, 0.2],
     'clip': True,
-    'name': 'CARPLATE_FOUR_CORNERS',
+    'name': 'MOBILENET_CARPLATE',
 }
 
 two_stage_end2end = {

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import car_branch, carplate_branch, change_cfg_for_ssd512
+from data import car, carplate, change_cfg_for_ssd512
 import os
 
 
@@ -29,8 +29,8 @@ class SSD_two_branch(nn.Module):
         super(SSD_two_branch, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.car_cfg = car_branch
-        self.carplate_cfg = carplate_branch
+        self.car_cfg = car
+        self.carplate_cfg = carplate
         if size == 512:
             self.car_cfg = change_cfg_for_ssd512(self.car_cfg)
             self.carplate_cfg = change_cfg_for_ssd512(self.carplate_cfg)

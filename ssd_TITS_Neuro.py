@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import two_stage_end2end, carplate_branch, change_cfg_for_ssd512
+from data import two_stage_end2end, carplate, change_cfg_for_ssd512
 import os
 import numpy as np
 
@@ -54,7 +54,7 @@ class SSD_TITS_Neuro(nn.Module):
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = two_stage_end2end
-        self.carplate_cfg = carplate_branch
+        self.carplate_cfg = carplate
         if size == 512:
             self.cfg = change_cfg_for_ssd512(self.cfg)
             self.carplate_cfg = change_cfg_for_ssd512(self.carplate_cfg)
