@@ -390,7 +390,7 @@ def test_net(save_folder, net, cuda, dataset, im_size=300, object_size='all'):
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_carplate_four_corners', set_type)
+    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_carplate_bbox_or_four_corners', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     total_time = 0
@@ -408,8 +408,12 @@ def test_net(save_folder, net, cuda, dataset, im_size=300, object_size='all'):
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):
             dets = detections[0, j, :]
-            mask = dets[:, 0].gt(0.).expand(13, dets.size(0)).t()
-            dets = torch.masked_select(dets, mask).view(-1, 13)
+            if args.obj_type in ['carplate_four_corners', 'carplate_only_four_corners']:
+                mask = dets[:, 0].gt(0.).expand(13, dets.size(0)).t()
+                dets = torch.masked_select(dets, mask).view(-1, 13)
+            elif args.obj_type == 'carplate':
+                mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+                dets = torch.masked_select(dets, mask).view(-1, 5)
             if dets.size(0) == 0:
                 continue
             boxes = dets[:, 1:]
@@ -417,14 +421,26 @@ def test_net(save_folder, net, cuda, dataset, im_size=300, object_size='all'):
             boxes[:, 2] *= w
             boxes[:, 1] *= h
             boxes[:, 3] *= h
-            boxes[:, 4] *= w
-            boxes[:, 6] *= w
-            boxes[:, 8] *= w
-            boxes[:, 10] *= w
-            boxes[:, 5] *= h
-            boxes[:, 7] *= h
-            boxes[:, 9] *= h
-            boxes[:, 11] *= h
+            if args.obj_type in ['carplate_four_corners', 'carplate_only_four_corners']:
+                boxes[:, 4] *= w
+                boxes[:, 6] *= w
+                boxes[:, 8] *= w
+                boxes[:, 10] *= w
+                boxes[:, 5] *= h
+                boxes[:, 7] *= h
+                boxes[:, 9] *= h
+                boxes[:, 11] *= h
+            elif args.obj_type == 'carplate':
+                boxes_append = torch.zeros(boxes.shape[0], 8)
+                boxes_append[:, 0] = boxes[:, 0]
+                boxes_append[:, 2] = boxes[:, 2]
+                boxes_append[:, 4] = boxes[:, 2]
+                boxes_append[:, 6] = boxes[:, 0]
+                boxes_append[:, 1] = boxes[:, 1]
+                boxes_append[:, 3] = boxes[:, 1]
+                boxes_append[:, 5] = boxes[:, 3]
+                boxes_append[:, 7] = boxes[:, 3]
+                boxes = torch.cat((boxes, boxes_append), 1)
             scores = dets[:, 0].cpu().numpy()
             cls_dets = np.hstack((boxes.cpu().numpy(),
                                   scores[:, np.newaxis])).astype(np.float32,
