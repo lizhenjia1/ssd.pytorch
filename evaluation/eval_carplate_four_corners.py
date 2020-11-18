@@ -372,7 +372,6 @@ object_size: all, small, medium, large, finished
         with open(cachefile, 'rb') as f:
             recs = pickle.load(f)
 
-
     rec, prec, F1 = sf.calculate_F1_score(ovthresh, recs, detpath, classname, cal_type=cal_type)
 
     return rec, prec, F1
