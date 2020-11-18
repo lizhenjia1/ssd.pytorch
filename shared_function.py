@@ -57,14 +57,11 @@ def change_bbox_to_four_corners(bbox_list):
                 x_bottom_right, y_bottom_right, x_bottom_left, y_bottom_left]
 
 
-def calculate_AP(iou_thres, recs, detpath, classname, imagenames, cal_type='bbox'):
+def calculate_AP(ovthresh, recs, detpath, classname, imagenames, cal_type='bbox'):
     # read dets
     detfile = detpath.format(classname)
     with open(detfile, 'r') as f:
         lines = f.readlines()
-    rec = {}
-    prec = {}
-    ap = {}
     if any(lines) == 1:
         # exchange dets as key-value dic
         # 1. pred bbox with gt bbox; 2. bbox from pred four corners with gt bbox
@@ -98,15 +95,15 @@ def calculate_AP(iou_thres, recs, detpath, classname, imagenames, cal_type='bbox
                 preds = preds_dic[imagename]
             metric_fn.add(preds, GTs)
 
-        metrics = metric_fn.value(iou_thresholds=float(iou_thres))
-        rec[iou_thres] = metrics[float(iou_thres)][0]['recall']
-        prec[iou_thres] = metrics[float(iou_thres)][0]['precision']
-        ap[iou_thres] = metrics[float(iou_thres)][0]['ap']
+        metrics = metric_fn.value(iou_thresholds=ovthresh)
+        rec = metrics[ovthresh][0]['recall']
+        prec = metrics[ovthresh][0]['precision']
+        ap = metrics[ovthresh][0]['ap']
 
     return rec, prec, ap
 
 
-def calculate_F1_score(iou_thres, recs, detpath, classname, cal_type='fc'):
+def calculate_F1_score(ovthresh, recs, detpath, classname, cal_type='fc'):
     class_recs = {}
     npos = 0
     for imagename in recs.keys():
@@ -123,9 +120,6 @@ def calculate_F1_score(iou_thres, recs, detpath, classname, cal_type='fc'):
     detfile = detpath.format(classname)
     with open(detfile, 'r') as f:
         lines = f.readlines()
-    rec = {}
-    prec = {}
-    F1 = {}
     if any(lines) == 1:
         splitlines = [x.strip().split(' ') for x in lines]
         image_ids = [x[0] for x in splitlines]
@@ -166,7 +160,7 @@ def calculate_F1_score(iou_thres, recs, detpath, classname, cal_type='fc'):
                 ovmax = np.max(overlaps)
                 jmax = np.argmax(overlaps)
 
-            if ovmax > float(iou_thres):
+            if ovmax > ovthresh:
                 if not R['difficult'][jmax]:
                     if not R['det'][jmax]:
                         tp[d] = 1.
@@ -178,12 +172,8 @@ def calculate_F1_score(iou_thres, recs, detpath, classname, cal_type='fc'):
 
         tp_num = np.sum(tp)
         fp_num = np.sum(fp)
-        precision = tp_num / float(tp_num + fp_num)
-        recall = tp_num / float(npos)
-        F1_score = 2.*precision*recall/(precision+recall)
-
-        rec[iou_thres] = recall
-        prec[iou_thres] = precision
-        F1[iou_thres] = F1_score
+        rec = tp_num / float(npos)
+        prec = tp_num / float(tp_num + fp_num)
+        F1 = 2.*prec*rec/(prec+rec)
 
     return rec, prec, F1

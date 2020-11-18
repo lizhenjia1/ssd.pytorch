@@ -24,6 +24,7 @@ import numpy as np
 import pickle
 import cv2
 import shared_function as sf
+from log import log
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -207,6 +208,7 @@ def write_voc_results_file(all_boxes, dataset):
 
 
 def do_python_eval(output_dir='output', use_12=True, object_size='all'):
+    log.l.info("_".join(args.trained_model.split('/')[1:]) + '-' + args.voc_root.split('/')[-2])
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     # The PASCAL VOC metric changed in 2010
     use_12_metric = use_12
@@ -218,30 +220,35 @@ def do_python_eval(output_dir='output', use_12=True, object_size='all'):
         # AP for horizontal bbox
         if object_size == 'all':
             for cal_type in bbox_cal_types:
-                rec, prec, ap = eval_AP(
-                    filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
-                    use_12_metric=use_12_metric, object_size=object_size)
                 for t in args.iou_thres.split(','):
+                    rec, prec, ap = eval_AP(
+                        filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
+                        ovthresh=float(t.strip()), use_12_metric=use_12_metric, object_size=object_size)
+                    save_name = "_".join(args.trained_model.split('/')[1:]) + '-' + args.voc_root.split('/')[-2] + '-' + cal_type + '-' + t.strip()
+                    with open(os.path.join(output_dir, cls + '-' + save_name + '-pr.pkl'), 'wb') as f:
+                        pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
                     if cal_type == 'bbox':
-                        print('AP for {} with IoU threshold {} = {:.4f}'.format(cls, t.strip(), ap[t.strip()]))
-                        with open(os.path.join(output_dir, cls + '_' + t.strip() + '_pr.pkl'), 'wb') as f:
-                            pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+                        log.l.info('AP for {} with IoU threshold {} = {:.4f}'.format(cls, t.strip(), ap))
+                        print('AP for {} with IoU threshold {} = {:.4f}'.format(cls, t.strip(), ap))
                     elif cal_type == 'bbox_from_fc':
-                        print('AP for {} with IoU threshold {} from four corners = {:.4f}'.format(cls, t.strip(), ap[t.strip()]))
-                        with open(os.path.join(output_dir, cls + '_from_four_corners_' + t.strip() + '_pr.pkl'), 'wb') as f:
-                            pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+                        log.l.info('AP for {} with IoU threshold {} from four corners = {:.4f}'.format(cls, t.strip(), ap))
+                        print('AP for {} with IoU threshold {} from four corners = {:.4f}'.format(cls, t.strip(), ap))
         # F1-score for quadarilateral bbox
         for cal_type in four_corners_cal_types:
-            rec, prec, F1 = eval_F1_score(
-                filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
-                use_12_metric=use_12_metric, object_size=object_size)
             for t in args.iou_thres.split(','):
+                rec, prec, F1 = eval_F1_score(
+                    filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
+                    ovthresh=float(t.strip()), use_12_metric=use_12_metric, object_size=object_size)
                 if cal_type == 'fc':
+                    log.l.info('{} with IoU threshold {} => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
+                        cls, t.strip(), rec, prec, F1))
                     print('{} with IoU threshold {} => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
-                        cls, t.strip(), rec[t.strip()], prec[t.strip()], F1[t.strip()]))
+                        cls, t.strip(), rec, prec, F1))
                 elif cal_type == 'fc_from_bbox':
+                    log.l.info('{} with IoU threshold {} from bbox => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
+                        cls, t.strip(), rec, prec, F1))
                     print('{} with IoU threshold {} from bbox => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
-                        cls, t.strip(), rec[t.strip()], prec[t.strip()], F1[t.strip()]))
+                        cls, t.strip(), rec, prec, F1))
     print('--------------------------------------------------------------')
     print('Results computed with the **unofficial** Python eval code.')
     print('refer to https://github.com/bes-dev/mean_average_precision')
@@ -254,6 +261,7 @@ def eval_AP(detpath,
             classname,
             cachedir,
             cal_type,
+            ovthresh=0.5,
             use_12_metric=True,
             object_size='all'):
     """
@@ -266,6 +274,7 @@ imagesetfile: Text file containing the list of images, one image per line.
 classname: Category name (duh)
 cachedir: Directory for caching the annotations
 cal_type: bbox or bbox from four corners
+[ovthresh]: Overlap threshold (default = 0.5)
 [use_12_metric]: Whether to use VOC12's all points AP computation
    (default True)
 object_size: all, small, medium, large, not finished yet
@@ -302,16 +311,9 @@ object_size: all, small, medium, large, not finished yet
         with open(cachefile, 'rb') as f:
             recs = pickle.load(f)
 
-    rec_dic = {}
-    prec_dic = {}
-    ap_dic = {}
-    for t in args.iou_thres.split(','):
-        rec, prec, ap = sf.calculate_AP(t.strip(), recs, detpath, classname, imagenames, cal_type=cal_type)
-        rec_dic.update(rec)
-        prec_dic.update(prec)
-        ap_dic.update(ap)
+    rec, prec, ap = sf.calculate_AP(ovthresh, recs, detpath, classname, imagenames, cal_type=cal_type)
 
-    return rec_dic, prec_dic, ap_dic
+    return rec, prec, ap
 
 
 def eval_F1_score(detpath,
@@ -320,6 +322,7 @@ def eval_F1_score(detpath,
                   classname,
                   cachedir,
                   cal_type,
+                  ovthresh=0.5,
                   use_12_metric=True,
                   object_size='all'):
     """
@@ -332,6 +335,7 @@ imagesetfile: Text file containing the list of images, one image per line.
 classname: Category name (duh)
 cachedir: Directory for caching the annotations
 cal_type: four corners or four corners from bbox
+[ovthresh]: Overlap threshold (default = 0.5)
 [use_12_metric]: Whether to use VOC12's all points AP computation
    (default True)
 object_size: all, small, medium, large, finished
@@ -368,16 +372,10 @@ object_size: all, small, medium, large, finished
         with open(cachefile, 'rb') as f:
             recs = pickle.load(f)
 
-    rec_dic = {}
-    prec_dic = {}
-    F1_dic = {}
-    for t in args.iou_thres.split(','):
-        rec, prec, F1 = sf.calculate_F1_score(t.strip(), recs, detpath, classname, cal_type=cal_type)
-        rec_dic.update(rec)
-        prec_dic.update(prec)
-        F1_dic.update(F1)
 
-    return rec_dic, prec_dic, F1_dic
+    rec, prec, F1 = sf.calculate_F1_score(ovthresh, recs, detpath, classname, cal_type=cal_type)
+
+    return rec, prec, F1
 
 
 def test_net(save_folder, net, cuda, dataset, im_size=300, object_size='all'):
@@ -390,7 +388,7 @@ def test_net(save_folder, net, cuda, dataset, im_size=300, object_size='all'):
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_carplate_bbox_or_four_corners', set_type)
+    output_dir = get_output_dir(save_folder + '/ssd_carplate_bbox_or_four_corners', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     total_time = 0
