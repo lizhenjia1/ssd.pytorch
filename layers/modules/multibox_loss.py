@@ -552,36 +552,49 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
 
         # Border Loss (Smooth L1), only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
-        # priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx].view(-1, 4)
-        # decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
-        # decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+        priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx].view(-1, 4)
+        decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
+        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
         # Border Loss (Smooth L1), only for positive prior after nms and 0.6 threshold,
         # and select the one with largetst confidence
         # 跟demo中一样只保留最后用于展示的prediction做loss,这样减少了很多无关anchor带来的干扰
-        output = self.detect(loc_data, self.softmax(conf_data), priors, four_corners_data)
-        detections = output.data
-        display_idx = detections[:, 1, 0, 0] > 0.6
-        detections = detections[:, 1, 0, :]
-        display_pos = display_idx.unsqueeze(1).expand_as(detections)
-        final_detections = detections[display_pos].view(-1, 13)
-        decoded_boxes = final_detections[:, 1:5]
-        decoded_four_points = final_detections[:, 5:]
+        # output = self.detect(loc_data, self.softmax(conf_data), priors, four_corners_data)
+        # detections = output.data
+        # display_idx = detections[:, 1, 0, 0] > 0.6
+        # detections = detections[:, 1, 0, :]
+        # display_pos = display_idx.unsqueeze(1).expand_as(detections)
+        # final_detections = detections[display_pos].view(-1, 13)
+        # decoded_boxes = final_detections[:, 1:5]
+        # decoded_four_points = final_detections[:, 5:]
 
-        M = final_detections.shape[0]
+        # M = final_detections.shape[0]
 
         # 4 border losses
-        loss_border_left = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 0] - torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6])) / self.variance[0] / self.variance[1],
-                                            torch.zeros(decoded_boxes.shape[0]),
+        # loss_border_left = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 0] - torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6])) / self.variance[0] / self.variance[1],
+        #                                     torch.zeros(decoded_boxes.shape[0]),
+        #                                     size_average=False)
+        # loss_border_top = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 1] - torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3])) / self.variance[0] / self.variance[1],
+        #                                    torch.zeros(decoded_boxes.shape[0]),
+        #                                    size_average=False)
+        # loss_border_right = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 2] - torch.max(decoded_four_points[:, 2], decoded_four_points[:, 4])) / self.variance[0] / self.variance[1],
+        #                                    torch.zeros(decoded_boxes.shape[0]),
+        #                                    size_average=False)
+        # loss_border_bottom = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 3] - torch.max(decoded_four_points[:, 5], decoded_four_points[:, 7])) / self.variance[0] / self.variance[1],
+        #                                       torch.zeros(decoded_boxes.shape[0]),
+        #                                       size_average=False)
+
+        loss_border_left = F.smooth_l1_loss(decoded_boxes[:, 0] / self.variance[0],
+                                            torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]) / self.variance[0],
                                             size_average=False)
-        loss_border_top = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 1] - torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3])) / self.variance[0] / self.variance[1],
-                                           torch.zeros(decoded_boxes.shape[0]),
+        loss_border_top = F.smooth_l1_loss(decoded_boxes[:, 1] / self.variance[0],
+                                            torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3]) / self.variance[0],
                                            size_average=False)
-        loss_border_right = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 2] - torch.max(decoded_four_points[:, 2], decoded_four_points[:, 4])) / self.variance[0] / self.variance[1],
-                                           torch.zeros(decoded_boxes.shape[0]),
+        loss_border_right = F.smooth_l1_loss(decoded_boxes[:, 2] / self.variance[0],
+                                            torch.max(decoded_four_points[:, 2], decoded_four_points[:, 4]) / self.variance[0],
                                            size_average=False)
-        loss_border_bottom = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 3] - torch.max(decoded_four_points[:, 5], decoded_four_points[:, 7])) / self.variance[0] / self.variance[1],
-                                              torch.zeros(decoded_boxes.shape[0]),
+        loss_border_bottom = F.smooth_l1_loss(decoded_boxes[:, 3] / self.variance[0],
+                                            torch.max(decoded_four_points[:, 5], decoded_four_points[:, 7]) / self.variance[0],
                                               size_average=False)
 
         loss_border = loss_border_left + loss_border_top + loss_border_right + loss_border_bottom
@@ -615,12 +628,13 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         loss_l = loss_l.double()
         loss_c = loss_c.double()
         loss_four_corners = loss_four_corners.double()
-        loss_border = loss_border.double()
+        loss_border = 16.0 * loss_border.double()
         loss_l /= N
         loss_c /= N
         loss_four_corners /= N
-        if M == 0:
-            loss_border = torch.zeros(1)
-        elif M > 0:
-            loss_border /= M
+        loss_border /= N
+        # if M == 0:
+        #     loss_border = torch.zeros(1)
+        # elif M > 0:
+        #     loss_border /= M
         return loss_l, loss_c, loss_four_corners, loss_border
