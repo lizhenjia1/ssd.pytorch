@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import torch
+import math
 
 
 def point_form(boxes):
@@ -68,6 +69,51 @@ def jaccard(box_a, box_b):
     return inter / union  # [A,B]
 
 
+def match_ious(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
+    """Match each prior box with the ground truth box of the highest jaccard
+    overlap, encode the bounding boxes, then return the matched indices
+    corresponding to both confidence and location preds.
+    Args:
+        threshold: (float) The overlap threshold used when mathing boxes.
+        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
+        priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
+        variances: (tensor) Variances corresponding to each prior coord,
+            Shape: [num_priors, 4].
+        labels: (tensor) All the class labels for the image, Shape: [num_obj].
+        loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
+        conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
+        idx: (int) current batch index
+    Return:
+        The matched indices corresponding to 1)location and 2)confidence preds.
+    """
+    # jaccard index
+    loc_t[idx] = point_form(priors)
+    overlaps = jaccard(
+        truths,
+        point_form(priors)
+    )# (num_gt,num_priors)
+
+    # (Bipartite Matching)
+    # [num_objects,1] best prior for each ground truth
+    best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+    # [1,num_priors] best ground truth for each prior
+    best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+    best_truth_idx.squeeze_(0)
+    best_truth_overlap.squeeze_(0)
+    best_prior_idx.squeeze_(1)
+    best_prior_overlap.squeeze_(1)
+    best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
+    # TODO refactor: index  best_prior_idx with long tensor
+    # ensure every gt matches with its prior of max overlap
+    for j in range(best_prior_idx.size(0)):
+        best_truth_idx[best_prior_idx[j]] = j
+    matches = truths[best_truth_idx]          # Shape: [num_priors,4]
+    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
+    conf[best_truth_overlap < threshold] = 0  # label as background
+    loc_t[idx] = matches    # [num_priors,4] encoded offsets to learn
+    conf_t[idx] = conf  # [num_priors] top class label for each prior
+
+
 def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
@@ -108,7 +154,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
     matches = truths[best_truth_idx]          # Shape: [num_priors,4]
-    conf = labels[best_truth_idx] + 1         # Shape: [num_priors] 因为背景当做一类，所以需要+1
+    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
 
     loc = encode(matches, priors, variances)
@@ -372,6 +418,161 @@ def decode_four_corners(corners, priors, variances):
 
     res = priors_center + corners * variances[0] * priors_size
     return res
+
+
+def bbox_overlaps_iou(bboxes1, bboxes2):
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    ious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return ious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        ious = torch.zeros((cols, rows))
+        exchange = True
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (
+        bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (
+        bboxes2[:, 3] - bboxes2[:, 1])
+
+    inter_max_xy = torch.min(bboxes1[:, 2:],bboxes2[:, 2:])
+    inter_min_xy = torch.max(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    union = area1+area2-inter_area
+    ious = inter_area / union
+    ious = torch.clamp(ious,min=0,max = 1.0)
+    if exchange:
+        ious = ious.T
+    return ious
+
+
+def bbox_overlaps_giou(bboxes1, bboxes2):
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    ious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return ious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        ious = torch.zeros((cols, rows))
+        exchange = True
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (
+        bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (
+        bboxes2[:, 3] - bboxes2[:, 1])
+
+    inter_max_xy = torch.min(bboxes1[:, 2:],bboxes2[:, 2:])
+    inter_min_xy = torch.max(bboxes1[:, :2],bboxes2[:, :2])
+    out_max_xy = torch.max(bboxes1[:, 2:],bboxes2[:, 2:])
+    out_min_xy = torch.min(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
+    outer_area = outer[:, 0] * outer[:, 1]
+    union = area1+area2-inter_area
+    closure = outer_area
+
+    ious = inter_area / union - (closure - union) / closure
+    ious = torch.clamp(ious,min=-1.0,max = 1.0)
+    if exchange:
+        ious = ious.T
+    return ious
+
+
+def bbox_overlaps_diou(bboxes1, bboxes2):
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    dious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return dious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        dious = torch.zeros((cols, rows))
+        exchange = True
+
+    w1 = bboxes1[:, 2] - bboxes1[:, 0]
+    h1 = bboxes1[:, 3] - bboxes1[:, 1]
+    w2 = bboxes2[:, 2] - bboxes2[:, 0]
+    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+
+    area1 = w1 * h1
+    area2 = w2 * h2
+    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
+    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
+    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+
+    inter_max_xy = torch.min(bboxes1[:, 2:],bboxes2[:, 2:])
+    inter_min_xy = torch.max(bboxes1[:, :2],bboxes2[:, :2])
+    out_max_xy = torch.max(bboxes1[:, 2:],bboxes2[:, 2:])
+    out_min_xy = torch.min(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
+    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
+    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
+    union = area1+area2-inter_area
+    dious = inter_area / union - (inter_diag) / outer_diag
+    dious = torch.clamp(dious,min=-1.0,max = 1.0)
+    if exchange:
+        dious = dious.T
+    return dious
+
+
+def bbox_overlaps_ciou(bboxes1, bboxes2):
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    cious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return cious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        cious = torch.zeros((cols, rows))
+        exchange = True
+
+    w1 = bboxes1[:, 2] - bboxes1[:, 0]
+    h1 = bboxes1[:, 3] - bboxes1[:, 1]
+    w2 = bboxes2[:, 2] - bboxes2[:, 0]
+    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+
+    area1 = w1 * h1
+    area2 = w2 * h2
+
+    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
+    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
+    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+
+    inter_max_xy = torch.min(bboxes1[:, 2:],bboxes2[:, 2:])
+    inter_min_xy = torch.max(bboxes1[:, :2],bboxes2[:, :2])
+    out_max_xy = torch.max(bboxes1[:, 2:],bboxes2[:, 2:])
+    out_min_xy = torch.min(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
+    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
+    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
+    union = area1+area2-inter_area
+    u = (inter_diag) / outer_diag
+    iou = inter_area / union
+    v = (4 / (math.pi ** 2)) * torch.pow((torch.atan(w2 / h2) - torch.atan(w1 / h1)), 2)
+    with torch.no_grad():
+        S = 1 - iou
+        alpha = v / (S + v)
+    cious = iou - (u + alpha * v)
+    cious = torch.clamp(cious,min=-1.0,max = 1.0)
+    if exchange:
+        cious = cious.T
+    return cious
 
 
 def log_sum_exp(x):
