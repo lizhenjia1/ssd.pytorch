@@ -408,103 +408,6 @@ class MultiBoxLoss_four_corners(nn.Module):
         return loss_l, loss_c, loss_four_corners
 
 
-class MultiBoxLoss_only_four_corners(nn.Module):
-    def __init__(self, num_classes, overlap_thresh, prior_for_matching,
-                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
-                 use_gpu=True):
-        super(MultiBoxLoss_only_four_corners, self).__init__()
-        self.use_gpu = use_gpu
-        self.num_classes = num_classes
-        self.threshold = overlap_thresh
-        self.background_label = bkg_label
-        self.encode_target = encode_target
-        self.use_prior_for_matching = prior_for_matching
-        self.do_neg_mining = neg_mining
-        self.negpos_ratio = neg_pos
-        self.neg_overlap = neg_overlap
-        self.variance = cfg['variance']
-
-    def forward(self, predictions, targets):
-        """Multibox Loss
-        Args:
-            predictions (tuple): A tuple containing loc preds, conf preds,
-            and prior boxes from SSD net.
-                conf shape: torch.size(batch_size,num_priors,num_classes)
-                loc shape: torch.size(batch_size,num_priors,4)
-                priors shape: torch.size(num_priors,4)
-                four_corners shape: torch.size(batch_size,num_priors,8)
-
-            targets (tensor): Ground truth boxes and labels for a batch,
-                shape: [batch_size,num_objs,13] (last idx is the label).
-        """
-        conf_data, priors, four_corners_data = predictions
-
-        num = conf_data.size(0)  # batchsize
-        priors = priors[:conf_data.size(1), :]
-        num_priors = (priors.size(0))
-        num_classes = self.num_classes
-
-        # match priors (default boxes) and ground truth boxes
-        conf_t = torch.LongTensor(num, num_priors)
-        four_corners_t = torch.Tensor(num, num_priors, 8)
-        for idx in range(num):
-            truths = targets[idx][:, :-1].data
-            labels = targets[idx][:, -1].data
-            defaults = priors.data
-            match_only_four_corners(self.threshold, truths, defaults, self.variance, labels,
-                  conf_t, four_corners_t, idx)
-        if self.use_gpu:
-            conf_t = conf_t.cuda()
-            four_corners_t = four_corners_t.cuda()
-        # wrap targets
-        conf_t = Variable(conf_t, requires_grad=False)
-        four_corners_t = Variable(four_corners_t, requires_grad=False)
-
-        pos = conf_t > 0  # label > 0 for bbox regression, [batch,num_priors]
-        num_pos = pos.sum(dim=1, keepdim=True)
-
-        # Corner Loss (Smooth L1), only for positive prior
-        # Shape: [batch,num_priors,8]
-        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)
-
-        four_corners_p = four_corners_data[pos_idx].view(-1, 8)
-        four_corners_t = four_corners_t[pos_idx].view(-1, 8)
-
-        loss_four_corners = F.smooth_l1_loss(four_corners_p, four_corners_t, size_average=False)
-
-        # Compute max conf across batch for hard negative mining
-        batch_conf = conf_data.view(-1, self.num_classes)
-        # 参考https://www.cnblogs.com/JeasonIsCoding/p/10171201.html推导具体公式
-        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
-
-        # Hard Negative Mining
-        loss_c = loss_c.view(num, -1)
-        loss_c[pos] = 0  # filter out pos boxes for now
-        # 根据两次sort可以找出元素在升序或者降序中的位置,参考https://blog.csdn.net/LXX516/article/details/78804884
-        _, loss_idx = loss_c.sort(1, descending=True)
-        _, idx_rank = loss_idx.sort(1)
-        num_pos = pos.long().sum(1, keepdim=True)
-        num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
-        neg = idx_rank < num_neg.expand_as(idx_rank)
-
-        # Confidence Loss Including Positive and Negative Examples
-        pos_idx = pos.unsqueeze(2).expand_as(conf_data)
-        neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-
-        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
-        targets_weighted = conf_t[(pos+neg).gt(0)]
-
-        loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
-
-        # Sum of losses
-        N = num_pos.data.sum().double()
-        loss_c = loss_c.double()
-        loss_four_corners = loss_four_corners.double()
-        loss_c /= N
-        loss_four_corners /= N
-        return loss_c, loss_four_corners
-
-
 class MultiBoxLoss_four_corners_with_border(nn.Module):
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
@@ -520,9 +423,6 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
         self.variance = cfg['variance']
-        # for border loss
-        self.softmax = nn.Softmax(dim=-1)
-        self.detect = Detect_four_corners(num_classes, 0, 200, 0.01, 0.45)
 
     def forward(self, predictions, targets):
         """Multibox Loss
@@ -576,10 +476,10 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
 
         # Corner Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,8]
-        pos_idx_four_corners = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)  # [batch,num_priors,8]
+        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)  # [batch,num_priors,8]
 
-        four_corners_p = four_corners_data[pos_idx_four_corners].view(-1, 8)
-        four_corners_t = four_corners_t[pos_idx_four_corners].view(-1, 8)
+        four_corners_p = four_corners_data[pos_idx].view(-1, 8)
+        four_corners_t = four_corners_t[pos_idx].view(-1, 8)
 
         loss_four_corners = F.smooth_l1_loss(four_corners_p, four_corners_t, size_average=False)
 
@@ -589,34 +489,8 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
         decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
-        # Border Loss (Smooth L1), only for positive prior after nms and 0.6 threshold,
-        # and select the one with largetst confidence
-        # 跟demo中一样只保留最后用于展示的prediction做loss,这样减少了很多无关anchor带来的干扰
-        # output = self.detect(loc_data, self.softmax(conf_data), priors, four_corners_data)
-        # detections = output.data
-        # display_idx = detections[:, 1, 0, 0] > 0.6
-        # detections = detections[:, 1, 0, :]
-        # display_pos = display_idx.unsqueeze(1).expand_as(detections)
-        # final_detections = detections[display_pos].view(-1, 13)
-        # decoded_boxes = final_detections[:, 1:5]
-        # decoded_four_points = final_detections[:, 5:]
-
-        # M = final_detections.shape[0]
-
+        # Border Loss (Smooth L1), only for positive prior 
         # 4 border losses
-        # loss_border_left = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 0] - torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6])) / self.variance[0] / self.variance[1],
-        #                                     torch.zeros(decoded_boxes.shape[0]),
-        #                                     size_average=False)
-        # loss_border_top = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 1] - torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3])) / self.variance[0] / self.variance[1],
-        #                                    torch.zeros(decoded_boxes.shape[0]),
-        #                                    size_average=False)
-        # loss_border_right = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 2] - torch.max(decoded_four_points[:, 2], decoded_four_points[:, 4])) / self.variance[0] / self.variance[1],
-        #                                    torch.zeros(decoded_boxes.shape[0]),
-        #                                    size_average=False)
-        # loss_border_bottom = F.smooth_l1_loss(torch.tanh(decoded_boxes[:, 3] - torch.max(decoded_four_points[:, 5], decoded_four_points[:, 7])) / self.variance[0] / self.variance[1],
-        #                                       torch.zeros(decoded_boxes.shape[0]),
-        #                                       size_average=False)
-
         loss_border_left = F.smooth_l1_loss(torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]) / self.variance[0],
                                             decoded_boxes[:, 0] / self.variance[0],
                                             size_average=False)
@@ -666,10 +540,6 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
         loss_c /= N
         loss_four_corners /= N
         loss_border /= N
-        # if M == 0:
-        #     loss_border = torch.zeros(1)
-        # elif M > 0:
-        #     loss_border /= M
         return loss_l, loss_c, loss_four_corners, loss_border
 
 
@@ -688,9 +558,6 @@ class MultiBoxLoss_four_corners_with_CIoU(nn.Module):
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
         self.variance = cfg['variance']
-        # for border loss
-        self.softmax = nn.Softmax(dim=-1)
-        self.detect = Detect_four_corners(num_classes, 0, 200, 0.01, 0.45)
         self.loss = 'Ciou'
         self.pred_mode = 'Bbox'
         self.iou_loss = IouLoss(pred_mode=self.pred_mode, size_sum=True, variances=self.variance, losstype=self.loss)
@@ -747,10 +614,10 @@ class MultiBoxLoss_four_corners_with_CIoU(nn.Module):
 
         # Corner Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,8]
-        pos_idx_four_corners = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)  # [batch,num_priors,8]
+        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)  # [batch,num_priors,8]
 
-        four_corners_p = four_corners_data[pos_idx_four_corners].view(-1, 8)
-        four_corners_t = four_corners_t[pos_idx_four_corners].view(-1, 8)
+        four_corners_p = four_corners_data[pos_idx].view(-1, 8)
+        four_corners_t = four_corners_t[pos_idx].view(-1, 8)
 
         loss_four_corners = F.smooth_l1_loss(four_corners_p, four_corners_t, size_average=False)
 
@@ -803,3 +670,225 @@ class MultiBoxLoss_four_corners_with_CIoU(nn.Module):
         loss_four_corners /= N
         loss_border /= N
         return loss_l, loss_c, loss_four_corners, loss_border
+
+
+class MultiBoxLoss_only_four_corners(nn.Module):
+    def __init__(self, num_classes, overlap_thresh, prior_for_matching,
+                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
+                 use_gpu=True):
+        super(MultiBoxLoss_only_four_corners, self).__init__()
+        self.use_gpu = use_gpu
+        self.num_classes = num_classes
+        self.threshold = overlap_thresh
+        self.background_label = bkg_label
+        self.encode_target = encode_target
+        self.use_prior_for_matching = prior_for_matching
+        self.do_neg_mining = neg_mining
+        self.negpos_ratio = neg_pos
+        self.neg_overlap = neg_overlap
+        self.variance = cfg['variance']
+
+    def forward(self, predictions, targets):
+        """Multibox Loss
+        Args:
+            predictions (tuple): A tuple containing loc preds, conf preds,
+            and prior boxes from SSD net.
+                conf shape: torch.size(batch_size,num_priors,num_classes)
+                loc shape: torch.size(batch_size,num_priors,4)
+                priors shape: torch.size(num_priors,4)
+                four_corners shape: torch.size(batch_size,num_priors,8)
+
+            targets (tensor): Ground truth boxes and labels for a batch,
+                shape: [batch_size,num_objs,13] (last idx is the label).
+        """
+        conf_data, priors, four_corners_data = predictions
+
+        num = conf_data.size(0)  # batchsize
+        priors = priors[:conf_data.size(1), :]
+        num_priors = (priors.size(0))
+        num_classes = self.num_classes
+
+        # match priors (default boxes) and ground truth boxes
+        loc_t = torch.Tensor(num, num_priors, 4)
+        conf_t = torch.LongTensor(num, num_priors)
+        four_corners_t = torch.Tensor(num, num_priors, 8)
+        for idx in range(num):
+            truths = targets[idx][:, :-1].data
+            labels = targets[idx][:, -1].data
+            defaults = priors.data
+            match_only_four_corners(self.threshold, truths, defaults, self.variance, labels,
+                  loc_t, conf_t, four_corners_t, idx)
+        if self.use_gpu:
+            loc_t = loc_t.cuda()
+            conf_t = conf_t.cuda()
+            four_corners_t = four_corners_t.cuda()
+        # wrap targets
+        loc_t = Variable(loc_t, requires_grad=False)
+        conf_t = Variable(conf_t, requires_grad=False)
+        four_corners_t = Variable(four_corners_t, requires_grad=False)
+
+        pos = conf_t > 0  # label > 0 for bbox regression, [batch,num_priors]
+        num_pos = pos.sum(dim=1, keepdim=True)
+
+        # Corner Loss (Smooth L1), only for positive prior
+        # Shape: [batch,num_priors,8]
+        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)
+
+        four_corners_p = four_corners_data[pos_idx].view(-1, 8)
+        four_corners_t = four_corners_t[pos_idx].view(-1, 8)
+
+        loss_four_corners = F.smooth_l1_loss(four_corners_p, four_corners_t, size_average=False)
+
+        # Compute max conf across batch for hard negative mining
+        batch_conf = conf_data.view(-1, self.num_classes)
+        # 参考https://www.cnblogs.com/JeasonIsCoding/p/10171201.html推导具体公式
+        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
+
+        # Hard Negative Mining
+        loss_c = loss_c.view(num, -1)
+        loss_c[pos] = 0  # filter out pos boxes for now
+        # 根据两次sort可以找出元素在升序或者降序中的位置,参考https://blog.csdn.net/LXX516/article/details/78804884
+        _, loss_idx = loss_c.sort(1, descending=True)
+        _, idx_rank = loss_idx.sort(1)
+        num_pos = pos.long().sum(1, keepdim=True)
+        num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
+        neg = idx_rank < num_neg.expand_as(idx_rank)
+
+        # Confidence Loss Including Positive and Negative Examples
+        pos_idx = pos.unsqueeze(2).expand_as(conf_data)
+        neg_idx = neg.unsqueeze(2).expand_as(conf_data)
+
+        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
+        targets_weighted = conf_t[(pos+neg).gt(0)]
+
+        loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
+
+        # Sum of losses
+        N = num_pos.data.sum().double()
+        loss_c = loss_c.double()
+        loss_four_corners = loss_four_corners.double()
+        loss_c /= N
+        loss_four_corners /= N
+        return loss_c, loss_four_corners
+
+
+class MultiBoxLoss_only_four_corners_with_CIoU(nn.Module):
+    def __init__(self, num_classes, overlap_thresh, prior_for_matching,
+                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
+                 use_gpu=True):
+        super(MultiBoxLoss_only_four_corners_with_CIoU, self).__init__()
+        self.use_gpu = use_gpu
+        self.num_classes = num_classes
+        self.threshold = overlap_thresh
+        self.background_label = bkg_label
+        self.encode_target = encode_target
+        self.use_prior_for_matching = prior_for_matching
+        self.do_neg_mining = neg_mining
+        self.negpos_ratio = neg_pos
+        self.neg_overlap = neg_overlap
+        self.variance = cfg['variance']
+        self.loss = 'Ciou'
+        self.pred_mode = 'Bbox'
+        self.iou_loss = IouLoss(pred_mode=self.pred_mode, size_sum=True, variances=self.variance, losstype=self.loss)
+
+    def forward(self, predictions, targets):
+        """Multibox Loss
+        Args:
+            predictions (tuple): A tuple containing loc preds, conf preds,
+            and prior boxes from SSD net.
+                conf shape: torch.size(batch_size,num_priors,num_classes)
+                loc shape: torch.size(batch_size,num_priors,4)
+                priors shape: torch.size(num_priors,4)
+                four_corners shape: torch.size(batch_size,num_priors,8)
+
+            targets (tensor): Ground truth boxes and labels for a batch,
+                shape: [batch_size,num_objs,13] (last idx is the label).
+        """
+        conf_data, priors, four_corners_data = predictions
+
+        num = conf_data.size(0)  # batchsize
+        priors = priors[:conf_data.size(1), :]
+        num_priors = (priors.size(0))
+        num_classes = self.num_classes
+
+        # match priors (default boxes) and ground truth boxes
+        loc_t = torch.Tensor(num, num_priors, 4)
+        conf_t = torch.LongTensor(num, num_priors)
+        four_corners_t = torch.Tensor(num, num_priors, 8)
+        for idx in range(num):
+            truths = targets[idx][:, :-1].data
+            labels = targets[idx][:, -1].data
+            defaults = priors.data
+            match_only_four_corners(self.threshold, truths, defaults, self.variance, labels,
+                  loc_t, conf_t, four_corners_t, idx)
+        if self.use_gpu:
+            loc_t = loc_t.cuda()
+            conf_t = conf_t.cuda()
+            four_corners_t = four_corners_t.cuda()
+        # wrap targets
+        loc_t = Variable(loc_t, requires_grad=False)
+        conf_t = Variable(conf_t, requires_grad=False)
+        four_corners_t = Variable(four_corners_t, requires_grad=False)
+
+        pos = conf_t > 0  # label > 0 for bbox regression, [batch,num_priors]
+        num_pos = pos.sum(dim=1, keepdim=True)
+
+        # Shape: [batch,num_priors,4]
+        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data[:,:,:4])
+        loc_t = loc_t[pos_idx].view(-1, 4)
+
+        # Corner Loss (Smooth L1), only for positive prior
+        # Shape: [batch,num_priors,8]
+        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data)
+
+        four_corners_p = four_corners_data[pos_idx].view(-1, 8)
+        four_corners_t = four_corners_t[pos_idx].view(-1, 8)
+
+        loss_four_corners = F.smooth_l1_loss(four_corners_p, four_corners_t, size_average=False)
+
+        # CIoU Loss only for positive prior
+        # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
+        priors_pos = priors.unsqueeze(0).expand_as(four_corners_data[:,:,:4])[pos_idx].view(-1, 4)
+        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+
+        left = torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]).view(-1, 1)
+        top = torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3]).view(-1, 1)
+        right = torch.max(decoded_four_points[:, 2], decoded_four_points[:, 4]).view(-1, 1)
+        bottom = torch.max(decoded_four_points[:, 5], decoded_four_points[:, 7]).view(-1, 1)
+        decoded_boxes_from_four_points = torch.cat((left, top, right, bottom), 1)
+
+        loss_border = self.iou_loss(decoded_boxes_from_four_points, loc_t, priors_pos)
+
+        # Compute max conf across batch for hard negative mining
+        batch_conf = conf_data.view(-1, self.num_classes)
+        # 参考https://www.cnblogs.com/JeasonIsCoding/p/10171201.html推导具体公式
+        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
+
+        # Hard Negative Mining
+        loss_c = loss_c.view(num, -1)
+        loss_c[pos] = 0  # filter out pos boxes for now
+        # 根据两次sort可以找出元素在升序或者降序中的位置,参考https://blog.csdn.net/LXX516/article/details/78804884
+        _, loss_idx = loss_c.sort(1, descending=True)
+        _, idx_rank = loss_idx.sort(1)
+        num_pos = pos.long().sum(1, keepdim=True)
+        num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
+        neg = idx_rank < num_neg.expand_as(idx_rank)
+
+        # Confidence Loss Including Positive and Negative Examples
+        pos_idx = pos.unsqueeze(2).expand_as(conf_data)
+        neg_idx = neg.unsqueeze(2).expand_as(conf_data)
+
+        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
+        targets_weighted = conf_t[(pos+neg).gt(0)]
+
+        loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
+
+        # Sum of losses
+        N = num_pos.data.sum().double()
+        loss_c = loss_c.double()
+        loss_four_corners = loss_four_corners.double()
+        loss_border = 16.0 * loss_border.double()
+        loss_c /= N
+        loss_four_corners /= N
+        loss_border /= N
+        return loss_c, loss_four_corners, loss_border
