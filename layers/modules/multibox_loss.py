@@ -834,8 +834,8 @@ class MultiBoxLoss_only_four_corners_with_CIoU(nn.Module):
         num_pos = pos.sum(dim=1, keepdim=True)
 
         # Shape: [batch,num_priors,4]
-        pos_idx = pos.unsqueeze(pos.dim()).expand_as(four_corners_data[:,:,:4])
-        loc_t = loc_t[pos_idx].view(-1, 4)
+        pos_idx_loc = pos.unsqueeze(pos.dim()).expand_as(four_corners_data[:,:,:4])
+        loc_t = loc_t[pos_idx_loc].view(-1, 4)
 
         # Corner Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,8]
@@ -848,7 +848,7 @@ class MultiBoxLoss_only_four_corners_with_CIoU(nn.Module):
 
         # CIoU Loss only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
-        priors_pos = priors.unsqueeze(0).expand_as(four_corners_data[:,:,:4])[pos_idx].view(-1, 4)
+        priors_pos = priors.unsqueeze(0).expand_as(four_corners_data[:,:,:4])[pos_idx_loc].view(-1, 4)
         decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
         left = torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]).view(-1, 1)
