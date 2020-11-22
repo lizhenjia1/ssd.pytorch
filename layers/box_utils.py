@@ -110,7 +110,7 @@ def match_ious(threshold, truths, priors, variances, labels, loc_t, conf_t, idx)
     matches = truths[best_truth_idx]          # Shape: [num_priors,4]
     conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
-    loc_t[idx] = matches    # [num_priors,4] encoded offsets to learn
+    loc_t[idx] = matches[:, :4]    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
 
 
@@ -268,7 +268,7 @@ def match_only_four_corners(threshold, truths, priors, variances, labels, loc_t,
     conf = labels[best_truth_idx] + 1         # Shape: [num_priors] 因为背景当做一类，所以需要+1
     conf[best_truth_overlap < threshold] = 0  # label as background
 
-    loc_t[idx] = matches    # [num_priors,4] encoded offsets to learn
+    loc_t[idx] = matches[:, :4]    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
 
     four_corners = encode_four_corners(matches[:, 4:12], priors, variances)
