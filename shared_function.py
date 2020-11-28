@@ -95,12 +95,14 @@ def calculate_AP(ovthresh, recs, detpath, classname, imagenames, cal_type='bbox'
                 preds = preds_dic[imagename]
             metric_fn.add(preds, GTs)
 
-        metrics = metric_fn.value(iou_thresholds=ovthresh)
-        rec = metrics[ovthresh][0]['recall']
-        prec = metrics[ovthresh][0]['precision']
-        ap = metrics[ovthresh][0]['ap']
+        # metrics = metric_fn.value(iou_thresholds=ovthresh)
+        # rec = metrics[ovthresh][0]['recall']
+        # prec = metrics[ovthresh][0]['precision']
+        # ap = metrics[ovthresh][0]['ap']
+        metrics = metric_fn.value(iou_thresholds=np.arange(0.5, 1.0, 0.05), recall_thresholds=np.arange(0., 1.01, 0.01), mpolicy='soft')
+        map = metrics["mAP"]
 
-    return rec, prec, ap
+    return metrics, map
 
 
 def calculate_F1_score(ovthresh, recs, detpath, classname, cal_type='fc'):

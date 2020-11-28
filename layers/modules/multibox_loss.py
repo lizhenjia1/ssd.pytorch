@@ -1015,7 +1015,7 @@ class MultiBoxLoss_only_four_corners_with_CIoU(nn.Module):
         N = num_pos.data.sum().double()
         loss_c = loss_c.double()
         loss_four_corners = loss_four_corners.double()
-        loss_border = 16.0 * loss_border.double()
+        loss_border = 5.0 * loss_border.double()
         loss_c /= N
         loss_four_corners /= N
         loss_border /= N

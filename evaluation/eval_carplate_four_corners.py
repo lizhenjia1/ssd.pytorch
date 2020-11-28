@@ -207,7 +207,7 @@ def write_voc_results_file(all_boxes, dataset):
                             dets[k, 10] + 1, dets[k, 11] + 1))
 
 
-def do_python_eval(output_dir='output', use_12=True, object_size='all'):
+def do_python_eval(output_dir='output', use_12=False, object_size='all'):
     log.l.info("_".join(args.trained_model.split('/')[1:]) + '-' + args.voc_root.split('/')[-2])
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     # The PASCAL VOC metric changed in 2010
@@ -220,25 +220,30 @@ def do_python_eval(output_dir='output', use_12=True, object_size='all'):
         # AP for horizontal bbox
         if object_size == 'all':
             for cal_type in bbox_cal_types:
-                for t in args.iou_thres.split(','):
-                    rec, prec, ap = eval_AP(
-                        filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
-                        ovthresh=float(t.strip()), use_12_metric=use_12_metric, object_size=object_size)
-                    save_name = "_".join(args.trained_model.split('/')[1:]) + '-' + args.voc_root.split('/')[-2] + '-' + cal_type + '-' + t.strip()
-                    with open(os.path.join(output_dir, cls + '-' + save_name + '-pr.pkl'), 'wb') as f:
-                        pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-                    if cal_type == 'bbox':
-                        log.l.info('AP for {} with IoU threshold {} = {:.4f}'.format(cls, t.strip(), ap))
-                        print('AP for {} with IoU threshold {} = {:.4f}'.format(cls, t.strip(), ap))
-                    elif cal_type == 'bbox_from_fc':
-                        log.l.info('AP for {} with IoU threshold {} from four corners = {:.4f}'.format(cls, t.strip(), ap))
-                        print('AP for {} with IoU threshold {} from four corners = {:.4f}'.format(cls, t.strip(), ap))
+                metrics, map = eval_AP(
+                    filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
+                    use_12_metric=use_12_metric, object_size=object_size)
+                save_name = "_".join(args.trained_model.split('/')[1:]) + '-' + args.voc_root.split('/')[-2] + '-' + cal_type + '-' + 'coco'
+                with open(os.path.join(output_dir, cls + '-' + save_name + '-pr.pkl'), 'wb') as f:
+                    pickle.dump({'metrics': metrics}, f)
+                if cal_type == 'bbox':
+                    log.l.info('AP for {} with COCO = {:.4f}'.format(cls, map))
+                    print('AP for {} with COCO = {:.4f}'.format(cls,  map))
+                elif cal_type == 'bbox_from_fc':
+                    log.l.info('AP for {} with COCO from four corners = {:.4f}'.format(cls, map))
+                    print('AP for {} with COCO from four corners = {:.4f}'.format(cls, map))
         # F1-score for quadarilateral bbox
         for cal_type in four_corners_cal_types:
+            rec_list = []
+            prec_list = []
+            F1_list = []
             for t in args.iou_thres.split(','):
                 rec, prec, F1 = eval_F1_score(
                     filename, annopath, imgsetpath.format(set_type), cls, cachedir, cal_type,
                     ovthresh=float(t.strip()), use_12_metric=use_12_metric, object_size=object_size)
+                rec_list.append(rec)
+                prec_list.append(prec)
+                F1_list.append(F1)
                 if cal_type == 'fc':
                     log.l.info('{} with IoU threshold {} => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
                         cls, t.strip(), rec, prec, F1))
@@ -249,6 +254,10 @@ def do_python_eval(output_dir='output', use_12=True, object_size='all'):
                         cls, t.strip(), rec, prec, F1))
                     print('{} with IoU threshold {} from bbox => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
                         cls, t.strip(), rec, prec, F1))
+            log.l.info('{} with Mean => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
+                cls, np.mean(np.array(rec_list)), np.mean(np.array(prec_list)), np.mean(np.array(F1_list))))
+            print('{} with Mean => recall: {:.4f}, precision: {:.4f}, F1-score: {:.4f}'.format(
+                cls, np.mean(np.array(rec_list)), np.mean(np.array(prec_list)), np.mean(np.array(F1_list))))
     print('--------------------------------------------------------------')
     print('Results computed with the **unofficial** Python eval code.')
     print('refer to https://github.com/bes-dev/mean_average_precision')
@@ -262,7 +271,7 @@ def eval_AP(detpath,
             cachedir,
             cal_type,
             ovthresh=0.5,
-            use_12_metric=True,
+            use_12_metric=False,
             object_size='all'):
     """
 Top level function that does the PASCAL VOC evaluation.
@@ -311,9 +320,9 @@ object_size: all, small, medium, large, not finished yet
         with open(cachefile, 'rb') as f:
             recs = pickle.load(f)
 
-    rec, prec, ap = sf.calculate_AP(ovthresh, recs, detpath, classname, imagenames, cal_type=cal_type)
+    metrics, map = sf.calculate_AP(ovthresh, recs, detpath, classname, imagenames, cal_type=cal_type)
 
-    return rec, prec, ap
+    return metrics, map
 
 
 def eval_F1_score(detpath,
