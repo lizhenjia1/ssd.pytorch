@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from data import coco as cfg
-from ..box_utils import match, match_offset, match_four_corners, match_two_stage_end2end,\
-    match_two_stage_end2end_offset, log_sum_exp
-from ..box_utils import decode, decode_four_corners
+from ..box_utils import match_two_stage_end2end_offset
 
 
 class ProposalTargetLayer_offset(nn.Module):

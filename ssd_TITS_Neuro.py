@@ -143,6 +143,7 @@ class SSD_TITS_Neuro(nn.Module):
         carplate_four_corners = list()
 
         # apply vgg up to conv1_1 relu
+        # TODO: may be conv1_1 features
         for k in range(2):
             x = self.vgg[k](x)
             if k == 1:

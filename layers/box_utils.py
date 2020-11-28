@@ -312,6 +312,7 @@ def match_two_stage_end2end_offset(truths, priors, rois_t, expand_num):
     # best_prior_overlap.squeeze_(1)
     matches = priors[best_prior_idx]          # Shape: [num_priors,4]
 
+    # TODO: 扩大区域不一定限制在车内,另外选roi不一定非得是与GT的IoU最大,只要包含GT或者IoU最大即可
     # 针对matches中offset,size以及扩大倍数在车内扩大
     car_center = (matches[:, [1, 2]] + matches[:, [3, 4]]) / 2
     lp_center = car_center + matches[:, [8, 9]]
@@ -381,6 +382,23 @@ def encode_four_corners(matched, priors, variances):
     return g_corners  # [num_priors,8], 按列拼接
 
 
+def encode_four_corners_TextBoxesPlusPlus(matched, priors, variances):
+    xmin = (priors[:, 0] - priors[:, 2] / 2).view(-1, 1)
+    ymin = (priors[:, 1] - priors[:, 3] / 2).view(-1, 1)
+    xmax = (priors[:, 0] + priors[:, 2] / 2).view(-1, 1)
+    ymax = (priors[:, 1] + priors[:, 3] / 2).view(-1, 1)
+    priors_four_corners = torch.cat((xmin, ymin, xmax, ymin, xmax, ymax, xmin, max), 1)
+    priors_size = priors[:, 2:].repeat(1, 4)
+
+    # dist b/t match corner and prior's center
+    g_corners = matched - priors_four_corners
+    # encode variance
+    g_corners /= (variances[0] * priors_size)
+
+    # return target for smooth_l1_loss
+    return g_corners  # [num_priors,8], 按列拼接
+
+
 # Adapted from https://github.com/Hakuyume/chainer-ssd
 def decode(loc, priors, variances):
     """Decode locations from predictions using priors to undo
@@ -418,6 +436,18 @@ def decode_four_corners(corners, priors, variances):
     priors_size = priors[:, 2:].repeat(1, 4)
 
     res = priors_center + corners * variances[0] * priors_size
+    return res
+
+
+def decode_four_corners_TextBoxesPlusPlus(corners, priors, variances):
+    xmin = (priors[:, 0] - priors[:, 2] / 2).view(-1, 1)
+    ymin = (priors[:, 1] - priors[:, 3] / 2).view(-1, 1)
+    xmax = (priors[:, 0] + priors[:, 2] / 2).view(-1, 1)
+    ymax = (priors[:, 1] + priors[:, 3] / 2).view(-1, 1)
+    priors_four_corners = torch.cat((xmin, ymin, xmax, ymin, xmax, ymax, xmin, max), 1)
+    priors_size = priors[:, 2:].repeat(1, 4)
+
+    res = priors_four_corners + corners * variances[0] * priors_size
     return res
 
 
