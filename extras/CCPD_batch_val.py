@@ -2,7 +2,7 @@ import os
 
 root_dir = '/data/CCPD/VOC/'
 models = {
-    # 'CCPD_carplate_bbox_weights': ['carplate', 512],
+    'CCPD_carplate_bbox_weights': ['carplate', 512],
     'CCPD_carplate_bbox_four_corners_weights': ['carplate_four_corners', 512],
     'CCPD_carplate_bbox_four_corners_with_CIoU_loss_weights': ['carplate_four_corners', 512],
     'CCPD_carplate_only_four_corners_weights': ['carplate_only_four_corners', 512],

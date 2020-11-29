@@ -132,7 +132,7 @@ def write_voc_results_file(all_boxes, dataset):
                                    dets[k, 2] + 1, dets[k, 3] + 1))
 
 
-def do_python_eval(output_dir='output', use_12=True):
+def do_python_eval(output_dir='output', use_12=False):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     aps = []
     # The PASCAL VOC metric changed in 2010
@@ -142,14 +142,14 @@ def do_python_eval(output_dir='output', use_12=True):
         os.mkdir(output_dir)
     for i, cls in enumerate(labelmap):
         filename = get_voc_results_file_template(set_type, cls)
-        rec, prec, ap = voc_eval(
+        metrics, map = voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
            ovthresh=0.75, use_12_metric=use_12_metric)
-        aps += [ap]
-        print('AP for {} = {:.4f}'.format(cls, ap))
-        with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
-            pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-        log.l.info('AP for {} = {:.4f}'.format(cls, ap))
+        aps += [map]
+        print('AP for {} = {:.4f}'.format(cls, map))
+        # with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
+        #     pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+        log.l.info('AP for {} = {:.4f}'.format(cls, map))
     log.l.info('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('~~~~~~~~')
@@ -171,7 +171,7 @@ def voc_eval(detpath,
              classname,
              cachedir,
              ovthresh=0.75,
-             use_12_metric=True):
+             use_12_metric=False):
     """rec, prec, ap = voc_eval(detpath,
                            annopath,
                            imagesetfile,
@@ -248,16 +248,17 @@ cachedir: Directory for caching the annotations
                 preds = preds_dic[imagename]
             metric_fn.add(preds, GTs)
 
-        metrics = metric_fn.value(iou_thresholds=ovthresh)
-        ap = metrics[ovthresh][0]['ap']
-        rec = metrics[ovthresh][0]['recall']
-        prec = metrics[ovthresh][0]['precision']
+        metrics = metric_fn.value(iou_thresholds=np.arange(0.5, 1.0, 0.05), recall_thresholds=np.arange(0., 1.01, 0.01), mpolicy='soft')
+        map = metrics["mAP"]
+        # metrics = metric_fn.value(iou_thresholds=ovthresh)
+        # ap = metrics[ovthresh][0]['ap']
+        # rec = metrics[ovthresh][0]['recall']
+        # prec = metrics[ovthresh][0]['precision']
     else:
-        rec = -1.
-        prec = -1.
-        ap = -1.
+        metrics = {}
+        map = -1.
 
-    return rec, prec, ap
+    return metrics, map
 
 
 def test_net(save_folder, obj_type, voc_root, set_type_, labelmap_, net, cuda, dataset, transform, top_k,
@@ -340,8 +341,8 @@ def test_net(save_folder, obj_type, voc_root, set_type_, labelmap_, net, cuda, d
             total_time += detect_time
     print("average time: " + str(total_time / (num_images-1) * 1000) + ' ms')
 
-    with open(det_file, 'wb') as f:
-        pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
+    # with open(det_file, 'wb') as f:
+    #     pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
     evaluate_detections(all_boxes, output_dir, dataset)
