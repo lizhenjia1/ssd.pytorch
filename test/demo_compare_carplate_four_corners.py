@@ -1,5 +1,5 @@
 '''
-python test/demo_carplate_four_corners.py --input_size 512 --trained_model_bbox weights/CCPD_carplate_bbox_weights/ssd512_40000.pth --trained_model_only_four_corners weights/CCPD_carplate_only_four_corners_with_CIoU_loss_weights_16/ssd512_50000.pth --trained_model_four_corners weights/CCPD_carplate_bbox_four_corners_with_CIoU_loss_weights_16/ssd512_50000.pth
+python test/demo_compare_carplate_four_corners.py --input_size 512 --trained_model_bbox weights/CCPD_carplate_bbox_weights/ssd512_40000.pth --trained_model_only_four_corners weights/CCPD_carplate_only_four_corners_with_CIoU_loss_weights_16/ssd512_50000.pth --trained_model_four_corners weights/CCPD_carplate_bbox_four_corners_with_CIoU_loss_weights_16/ssd512_50000.pth
 '''
 
 import torch
