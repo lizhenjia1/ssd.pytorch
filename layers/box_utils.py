@@ -387,7 +387,7 @@ def encode_four_corners_TextBoxesPlusPlus(matched, priors, variances):
     ymin = (priors[:, 1] - priors[:, 3] / 2).view(-1, 1)
     xmax = (priors[:, 0] + priors[:, 2] / 2).view(-1, 1)
     ymax = (priors[:, 1] + priors[:, 3] / 2).view(-1, 1)
-    priors_four_corners = torch.cat((xmin, ymin, xmax, ymin, xmax, ymax, xmin, max), 1)
+    priors_four_corners = torch.cat((xmin, ymin, xmax, ymin, xmax, ymax, xmin, ymax), 1)
     priors_size = priors[:, 2:].repeat(1, 4)
 
     # dist b/t match corner and prior's center
@@ -444,7 +444,7 @@ def decode_four_corners_TextBoxesPlusPlus(corners, priors, variances):
     ymin = (priors[:, 1] - priors[:, 3] / 2).view(-1, 1)
     xmax = (priors[:, 0] + priors[:, 2] / 2).view(-1, 1)
     ymax = (priors[:, 1] + priors[:, 3] / 2).view(-1, 1)
-    priors_four_corners = torch.cat((xmin, ymin, xmax, ymin, xmax, ymax, xmin, max), 1)
+    priors_four_corners = torch.cat((xmin, ymin, xmax, ymin, xmax, ymax, xmin, ymax), 1)
     priors_size = priors[:, 2:].repeat(1, 4)
 
     res = priors_four_corners + corners * variances[0] * priors_size
