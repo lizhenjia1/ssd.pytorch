@@ -458,6 +458,7 @@ def test_net(save_folder, net, cuda, dataset, im_size=300, object_size='all'):
         if i > 0:
             total_time += detect_time
     print("average time: " + str(total_time / (num_images-1) * 1000) + ' ms')
+    print("FPS: " + str(1000.0 / (total_time / (num_images-1) * 1000.0)))
 
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
