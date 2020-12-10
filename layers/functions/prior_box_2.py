@@ -28,7 +28,7 @@ class PriorBox_2(object):
         mean = []
         for k, f in enumerate(self.feature_maps):
             for i, j in product(range(f), repeat=2):  # 笛卡尔积，repeat=2表示与自身笛卡尔积
-                f_k = self.image_size / self.steps[k]  # 近似特征图大小
+                f_k = self.feature_maps[k]  # 近似特征图大小
                 # unit center x,y
                 cx = (j + 0.5) / f_k
                 cy = (i + 0.5) / f_k

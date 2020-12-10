@@ -43,7 +43,7 @@ class PriorBox_kmeans(object):
             ])
         for k, f in enumerate(self.feature_maps):
             for i, j in product(range(f), repeat=2):
-                f_k = self.image_size / self.steps[k]
+                f_k = self.feature_maps[k]
                 # unit center x,y
                 cx = (j + 0.5) / f_k
                 cy = (i + 0.5) / f_k
