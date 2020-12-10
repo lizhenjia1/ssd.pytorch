@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Function
 from ..box_utils import decode, decode_offset, decode_size, decode_four_corners, nms
+from ..box_utils import decode_four_corners_TextBoxesPlusPlus
 from data import voc as cfg
 
 import warnings
@@ -181,7 +182,7 @@ class Detect_four_corners(Function):
         # Decode predictions into bboxes.
         for i in range(num):
             decoded_boxes = decode(loc_data[i], prior_data, self.variance)  # [num_priors,4]
-            decoded_corners = decode_four_corners(four_corners_data[i], prior_data, self.variance)  # [num_priors,8]
+            decoded_corners = decode_four_corners_TextBoxesPlusPlus(four_corners_data[i], prior_data, self.variance)  # [num_priors,8]
             # For each class, perform nms
             conf_scores = conf_preds[i].clone()  # [num_classes,num_priors]
 
@@ -248,7 +249,7 @@ class Detect_only_four_corners(Function):
 
         # Decode predictions into bboxes.
         for i in range(num):
-            decoded_corners = decode_four_corners(four_corners_data[i], prior_data, self.variance)  # [num_priors,8]
+            decoded_corners = decode_four_corners_TextBoxesPlusPlus(four_corners_data[i], prior_data, self.variance)  # [num_priors,8]
             # For each class, perform nms
             conf_scores = conf_preds[i].clone()  # [num_classes,num_priors]
 

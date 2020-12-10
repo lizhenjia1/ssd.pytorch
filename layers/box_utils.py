@@ -235,7 +235,7 @@ def match_four_corners(threshold, truths, priors, variances, labels, loc_t, conf
     loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
 
-    four_corners = encode_four_corners(matches[:, 4:12], priors, variances)
+    four_corners = encode_four_corners_TextBoxesPlusPlus(matches[:, 4:12], priors, variances)
     four_corners_t[idx] = four_corners
 
 
@@ -271,7 +271,7 @@ def match_only_four_corners(threshold, truths, priors, variances, labels, loc_t,
     loc_t[idx] = matches[:, :4]    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
 
-    four_corners = encode_four_corners(matches[:, 4:12], priors, variances)
+    four_corners = encode_four_corners_TextBoxesPlusPlus(matches[:, 4:12], priors, variances)
     four_corners_t[idx] = four_corners
 
 

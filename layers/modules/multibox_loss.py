@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from data import voc as cfg
 from ..box_utils import match, match_offset, match_four_corners, match_only_four_corners, log_sum_exp
-from ..box_utils import decode, decode_four_corners
+from ..box_utils import decode, decode_four_corners, decode_four_corners_TextBoxesPlusPlus
 from ..box_utils import match_ious, bbox_overlaps_iou, bbox_overlaps_giou, bbox_overlaps_diou, bbox_overlaps_ciou
 from ..functions.detection import Detect_four_corners
 
@@ -467,10 +467,10 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
 
         # Localization Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,4]
-        pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)  # [batch,num_priors,4]
+        pos_idx_loc = pos.unsqueeze(pos.dim()).expand_as(loc_data)  # [batch,num_priors,4]
 
-        loc_p = loc_data[pos_idx].view(-1, 4)
-        loc_t = loc_t[pos_idx].view(-1, 4)
+        loc_p = loc_data[pos_idx_loc].view(-1, 4)
+        loc_t = loc_t[pos_idx_loc].view(-1, 4)
 
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
 
@@ -485,7 +485,7 @@ class MultiBoxLoss_four_corners_with_border(nn.Module):
 
         # Border Loss (Smooth L1), only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
-        priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx].view(-1, 4)
+        priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx_loc].view(-1, 4)
         decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
         decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
@@ -605,10 +605,10 @@ class MultiBoxLoss_four_corners_with_CIoU(nn.Module):
 
         # Localization Loss (Smooth L1), only for positive prior
         # Shape: [batch,num_priors,4]
-        pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)  # [batch,num_priors,4]
+        pos_idx_loc = pos.unsqueeze(pos.dim()).expand_as(loc_data)  # [batch,num_priors,4]
 
-        loc_p = loc_data[pos_idx].view(-1, 4)
-        loc_t = loc_t[pos_idx].view(-1, 4)
+        loc_p = loc_data[pos_idx_loc].view(-1, 4)
+        loc_t = loc_t[pos_idx_loc].view(-1, 4)
 
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
 
@@ -623,9 +623,9 @@ class MultiBoxLoss_four_corners_with_CIoU(nn.Module):
 
         # CIoU Loss only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
-        priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx].view(-1, 4)
+        priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx_loc].view(-1, 4)
         decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
-        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+        decoded_four_points = decode_four_corners_TextBoxesPlusPlus(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
         left = torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]).view(-1, 1)
         top = torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3]).view(-1, 1)
@@ -977,7 +977,7 @@ class MultiBoxLoss_only_four_corners_with_CIoU(nn.Module):
         # CIoU Loss only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
         priors_pos = priors.unsqueeze(0).expand_as(four_corners_data[:,:,:4])[pos_idx_loc].view(-1, 4)
-        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+        decoded_four_points = decode_four_corners_TextBoxesPlusPlus(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
         left = torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]).view(-1, 1)
         top = torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3]).view(-1, 1)
