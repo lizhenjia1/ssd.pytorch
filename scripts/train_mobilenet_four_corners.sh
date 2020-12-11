@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=2,3 python train_mobilenet_four_corners.py --dataset CARPLATE_FOUR_CORNERS --dataset_root /data/CCPD/VOC --save_folder CCPD_carplate_bbox_four_corners_weights/ --input_size 300 --lr 1e-4 --visdom True --batch_size 32 --obj_type carplate_four_corners

@@ -1,5 +1,3 @@
-# borrowed from "https://github.com/marvis/pytorch-mobilenet"
-
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -23,11 +21,11 @@ class MobileNetV1(nn.Module):
 
                 nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(oup),
-                nn.ReLU(inplace=True),
+                nn.ReLU(inplace=True)
             )
 
         self.model = nn.Sequential(
-            conv_bn(3, 32, 1),
+            conv_bn(3, 32, 2),
             conv_dw(32, 64, 1),
             conv_dw(64, 128, 2),
             conv_dw(128, 128, 1),
@@ -40,7 +38,33 @@ class MobileNetV1(nn.Module):
             conv_dw(512, 512, 1),
             conv_dw(512, 512, 1),
             conv_dw(512, 1024, 2),
-            conv_dw(1024, 1024, 1),
+            conv_dw(1024, 1024, 1)
+        )
+        self.extras = nn.Sequential(
+            nn.Sequential(
+                nn.Conv2d(in_channels=1024, out_channels=256, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            ),
+            nn.Sequential(
+                nn.Conv2d(in_channels=512, out_channels=128, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            ),
+            nn.Sequential(
+                nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            ),
+            nn.Sequential(
+                nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+                nn.ReLU()
+            )
         )
         self.fc = nn.Linear(1024, num_classes)
 

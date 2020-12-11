@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import two_stage_end2end, carplate_branch, change_cfg_for_ssd512
+from data import two_stage_end2end, carplate, change_cfg_for_ssd512
 import os
 import numpy as np
 
@@ -54,7 +54,7 @@ class SSD_TITS_Neuro(nn.Module):
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = two_stage_end2end
-        self.carplate_cfg = carplate_branch
+        self.carplate_cfg = carplate
         if size == 512:
             self.cfg = change_cfg_for_ssd512(self.cfg)
             self.carplate_cfg = change_cfg_for_ssd512(self.carplate_cfg)
@@ -143,6 +143,7 @@ class SSD_TITS_Neuro(nn.Module):
         carplate_four_corners = list()
 
         # apply vgg up to conv1_1 relu
+        # TODO: may be conv1_1 features
         for k in range(2):
             x = self.vgg[k](x)
             if k == 1:

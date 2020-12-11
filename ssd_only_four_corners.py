@@ -3,12 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import carplate_four_corners, change_cfg_for_ssd512
+from data import carplate, change_cfg_for_ssd512
 import os
-import mobilenet
 
 
-class SSD_four_corners(nn.Module):
+class SSD_only_four_corners(nn.Module):
     """Single Shot Multibox Architecture
     The network is composed of a base VGG network followed by the
     added multibox conv layers.  Each multibox layer branches into
@@ -27,10 +26,10 @@ class SSD_four_corners(nn.Module):
     """
 
     def __init__(self, phase, size, base, extras, head, num_classes):
-        super(SSD_four_corners, self).__init__()
+        super(SSD_only_four_corners, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.cfg = carplate_four_corners
+        self.cfg = carplate
         if size == 512:
             self.cfg = change_cfg_for_ssd512(self.cfg)
         self.priorbox = PriorBox(self.cfg)
@@ -44,13 +43,12 @@ class SSD_four_corners(nn.Module):
         self.L2Norm = L2Norm(512, 20)
         self.extras = nn.ModuleList(extras)
 
-        self.loc = nn.ModuleList(head[0])
-        self.conf = nn.ModuleList(head[1])
-        self.four_corners = nn.ModuleList(head[2])
+        self.conf = nn.ModuleList(head[0])
+        self.four_corners = nn.ModuleList(head[1])
 
         if phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
-            self.detect = Detect_four_corners(num_classes, 0, 200, 0.01, 0.45)
+            self.detect = Detect_only_four_corners(num_classes, 0, 200, 0.01, 0.45)
 
     def forward(self, x):
         """Applies network layers and ops on input image(s) x.
@@ -72,25 +70,21 @@ class SSD_four_corners(nn.Module):
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
         sources = list()
-        loc = list()
         conf = list()
         four_corners = list()
 
         # apply vgg up to conv4_3 relu
-        for k in range(12):
+        for k in range(23):
             x = self.vgg[k](x)
-            # print(x.size())
 
         s = self.L2Norm(x)
         sources.append(s)
-        # print(x.size())
 
         # apply vgg up to fc7
-        for k in range(12, len(self.vgg)):
+        for k in range(23, len(self.vgg)):
             x = self.vgg[k](x)
 
         sources.append(x)
-        # print(x.size())
 
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
@@ -99,26 +93,21 @@ class SSD_four_corners(nn.Module):
                 sources.append(x)
 
         # apply multibox head to source layers
-        for (x, l, c, f) in zip(sources, self.loc, self.conf, self.four_corners):
-            loc.append(l(x).permute(0, 2, 3, 1).contiguous())
+        for (x, c, f) in zip(sources, self.conf, self.four_corners):
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
             four_corners.append(f(x).permute(0, 2, 3, 1).contiguous())
 
-        loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
         four_corners = torch.cat([o.view(o.size(0), -1) for o in four_corners], 1)
         if self.phase == "test":
             output = self.detect(
-                loc.view(loc.size(0), -1, 4),                   # loc preds
                 self.softmax(conf.view(conf.size(0), -1,
                              self.num_classes)),                # conf preds
                 self.priors.type(type(x.data)),                 # default boxes
                 four_corners.view(four_corners.size(0), -1, 8)
             )
-        
         else:
             output = (
-                loc.view(loc.size(0), -1, 4),
                 conf.view(conf.size(0), -1, self.num_classes),
                 self.priors,
                 four_corners.view(four_corners.size(0), -1, 8)
@@ -160,14 +149,6 @@ def vgg(cfg, i, batch_norm=False):
                nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
     return layers
 
-def mobile(cfg,i,batch_norm=False):
-    layers = []
-    in_channels = i
-    model = mobilenet.MobileNetV1(512).model
-    print(len(model))
-    for i,layer in enumerate(model):
-        layers += [layer]
-    return layers
 
 def add_extras(cfg, size, i, batch_norm=False):
     # Extra layers added to VGG for feature scaling
@@ -191,51 +172,20 @@ def add_extras(cfg, size, i, batch_norm=False):
 
 
 def multibox(vgg, extra_layers, cfg, num_classes):
-    loc_layers = []
     conf_layers = []
     four_corners_layers = []
-    vgg_source =[21,-2]
-    print(len(vgg))
+    vgg_source = [21, -2]
     for k, v in enumerate(vgg_source):
-        print(vgg[v].out_channels)
-        loc_layers += [nn.Conv2d(vgg[v].out_channels,
-                                 cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
         four_corners_layers += [nn.Conv2d(vgg[v].out_channels,
                                   cfg[k] * 8, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
-        loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * num_classes, kernel_size=3, padding=1)]
         four_corners_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * 8, kernel_size=3, padding=1)]
-    return vgg, extra_layers, (loc_layers, conf_layers, four_corners_layers)
-
-def multibox_mobile(mobile, extra_layers, cfg, num_classes):
-    loc_layers = []
-    conf_layers = []
-    four_corners_layers = []
-    vgg_source = [10, 12]
-    out_ch = [512,1024]
-    # print(len(vgg))
-    for k, v in enumerate(vgg_source):
-        # print(mobile[v].out_channels)
-        loc_layers += [nn.Conv2d(out_ch[k],
-                                 cfg[k] * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(out_ch[k],
-                        cfg[k] * num_classes, kernel_size=3, padding=1)]
-        four_corners_layers += [nn.Conv2d(out_ch[k],
-                                  cfg[k] * 8, kernel_size=3, padding=1)]
-    for k, v in enumerate(extra_layers[1::2], 2):
-        loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                  * num_classes, kernel_size=3, padding=1)]
-        four_corners_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                  * 8, kernel_size=3, padding=1)]
-    return mobile, extra_layers, (loc_layers, conf_layers, four_corners_layers) 
+    return vgg, extra_layers, (conf_layers, four_corners_layers)
 
 
 base = {
@@ -262,7 +212,7 @@ def build_ssd(phase, size=300, num_classes=21):
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 SSD512 (size=300 or size=512) is supported!")
         return
-    base_, extras_, head_ = multibox_mobile(mobile(base[str(size)], 3),
+    base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], size, 1024),
                                      mbox[str(size)], num_classes)
-    return SSD_four_corners(phase, size, base_, extras_, head_, num_classes)
+    return SSD_only_four_corners(phase, size, base_, extras_, head_, num_classes)

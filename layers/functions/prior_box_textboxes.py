@@ -36,7 +36,6 @@ class PriorBox_textboxes(object):
         self.steps = cfg['steps']
         self.aspect_ratios = cfg['aspect_ratios']
         self.clip = cfg['clip']
-        self.version = cfg['name']
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
@@ -45,7 +44,7 @@ class PriorBox_textboxes(object):
         mean = []
         for k, f in enumerate(self.feature_maps):
             for i, j in product(range(f), repeat=2):
-                f_k = self.image_size / self.steps[k]
+                f_k = self.feature_maps[k]
                 # unit center x,y
                 cx = (j + 0.5) / f_k  #在原图中的相对位置
                 cy = (i + 0.5) / f_k
