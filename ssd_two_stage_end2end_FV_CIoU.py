@@ -115,7 +115,7 @@ class SSD_two_stage_end2end_FV_CIoU(nn.Module):
 
         if phase == 'test':
             self.softmax_2 = nn.Softmax(dim=-1)
-            self.detect_2 = Detect_four_corners(num_classes, 0, 200, 0.01, 0.45)
+            self.detect_2 = Detect_only_four_corners(num_classes, 0, 200, 0.01, 0.45)
 
     def forward(self, x, targets):
         """Applies network layers and ops on input image(s) x.
