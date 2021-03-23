@@ -625,7 +625,7 @@ class MultiBoxLoss_four_corners_with_CIoU(nn.Module):
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
         priors_pos = priors.unsqueeze(0).expand_as(loc_data)[pos_idx_loc].view(-1, 4)
         decoded_boxes = decode(loc_p, priors_pos, self.variance)  # [xmin, ymin, xmax, ymax]
-        decoded_four_points = decode_four_corners_TextBoxesPlusPlus(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
         left = torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]).view(-1, 1)
         top = torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3]).view(-1, 1)
@@ -977,7 +977,7 @@ class MultiBoxLoss_only_four_corners_with_CIoU(nn.Module):
         # CIoU Loss only for positive prior
         # 需要首先decode, 将priors扩展成[batch,num_priors,4], 然后根据pos得到[batch,num_pos,4]
         priors_pos = priors.unsqueeze(0).expand_as(four_corners_data[:,:,:4])[pos_idx_loc].view(-1, 4)
-        decoded_four_points = decode_four_corners_TextBoxesPlusPlus(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
+        decoded_four_points = decode_four_corners(four_corners_p, priors_pos, self.variance)  # [x_top_left, y_top_left, ...]
 
         left = torch.min(decoded_four_points[:, 0], decoded_four_points[:, 6]).view(-1, 1)
         top = torch.min(decoded_four_points[:, 1], decoded_four_points[:, 3]).view(-1, 1)
