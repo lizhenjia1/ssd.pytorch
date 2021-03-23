@@ -10,6 +10,31 @@ import numpy as np
 from layers.modules import ProposalTargetLayer_offset
 # https://github.com/longcw/RoIAlign.pytorch
 from roi_align.crop_and_resize import CropAndResizeFunction
+import time
+
+class Timer(object):
+    """A simple timer."""
+    def __init__(self):
+        self.total_time = 0.
+        self.calls = 0
+        self.start_time = 0.
+        self.diff = 0.
+        self.average_time = 0.
+
+    def tic(self):
+        # using time.time instead of time.clock because time time.clock
+        # does not normalize for multithreading
+        self.start_time = time.time()
+
+    def toc(self, average=True):
+        self.diff = time.time() - self.start_time
+        self.total_time += self.diff
+        self.calls += 1
+        self.average_time = self.total_time / self.calls
+        if average:
+            return self.average_time
+        else:
+            return self.diff
 
 
 def to_varabile(tensor, requires_grad=False, is_cuda=True):
@@ -112,6 +137,8 @@ class SSD_two_stage_end2end(nn.Module):
                     2: localization layers, Shape: [batch,num_priors*4]
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
+        _t = {'im_detect': Timer(), 'misc': Timer()}
+        _t['im_detect'].tic()
         sources = list()
         loc = list()
         conf = list()
@@ -164,7 +191,10 @@ class SSD_two_stage_end2end(nn.Module):
         has_lp = torch.cat([o.view(o.size(0), -1) for o in has_lp], 1)
         size_lp = torch.cat([o.view(o.size(0), -1) for o in size_lp], 1)
         offset = torch.cat([o.view(o.size(0), -1) for o in offset], 1)
+        detect_time = _t['im_detect'].toc(average=False)
+        print("ssd forward detect_time: " + str(detect_time))
 
+        _t['im_detect'].tic()
         # [num, num_classes, top_k, 10]
         rpn_rois = self.detect(
             loc.view(loc.size(0), -1, 4),  # loc preds
@@ -183,7 +213,10 @@ class SSD_two_stage_end2end(nn.Module):
         crop_height = self.size_2
         crop_width = self.size_2
         is_cuda = torch.cuda.is_available()
+        detect_time = _t['im_detect'].toc(average=False)
+        print("vehicle post processing detect_time: " + str(detect_time))
 
+        _t['im_detect'].tic()
         if self.phase == 'train':
             # rpn_rois: [num, num_classes, top_k, 10]
             # rois: [num, num_gt, 6], 6: IOU with GT, bbox(4), max iou with GT or not
@@ -411,7 +444,10 @@ class SSD_two_stage_end2end(nn.Module):
             #     # currentAxis.add_patch(plt.Rectangle(*coords, fill=False))
             #     plt.imshow(crops_torch_data[m, :, :, 33])
             #     plt.show()
+            detect_time = _t['im_detect'].toc(average=False)
+            print("roi warping detect_time: " + str(detect_time))
 
+            _t['im_detect'].tic()
             # 第二个网络!!!!!!!!!!!!!!!!!!!!!!!!!!
             x_2 = crops_torch
 
@@ -436,7 +472,10 @@ class SSD_two_stage_end2end(nn.Module):
             loc_2 = torch.cat([o.view(o.size(0), -1) for o in loc_2], 1)
             conf_2 = torch.cat([o.view(o.size(0), -1) for o in conf_2], 1)
             four_corners_2 = torch.cat([o.view(o.size(0), -1) for o in four_corners_2], 1)
+            detect_time = _t['im_detect'].toc(average=False)
+            print("license plate detect_time: " + str(detect_time))
 
+            _t['im_detect'].tic()
             output_2 = self.detect_2(
                 loc_2.view(loc_2.size(0), -1, 4),
                 self.softmax_2(conf_2.view(conf_2.size(0), -1,
@@ -444,6 +483,8 @@ class SSD_two_stage_end2end(nn.Module):
                 self.priors_2.cuda(),
                 four_corners_2.view(four_corners_2.size(0), -1, 8)
             )
+            detect_time = _t['im_detect'].toc(average=False)
+            print("license plate post processing detect_time: " + str(detect_time))
             
             # 这种方法是综合所有车里面的车牌检测结果,然后只选取所有结果的前200个
             # (num_car, 200, 13)
