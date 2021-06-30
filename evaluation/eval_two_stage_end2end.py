@@ -383,6 +383,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
     output_dir = get_output_dir(save_folder + '/ssd' + str(args.input_size) + '_two_stage_end2end', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
+    total_time = 0
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
         x = Variable(im.unsqueeze(0))
@@ -426,6 +427,11 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
         print('im_detect: {:d}/{:d} {:.4f}s'.format(i + 1,
                                                     num_images, detect_time))
+
+        if i > 0:
+            total_time += detect_time
+    print("average time: " + str(total_time / (num_images-1) * 1000) + ' ms')
+    print("FPS: " + str(1000.0 / (total_time / (num_images-1) * 1000.0)))
 
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)

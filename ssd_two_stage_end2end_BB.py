@@ -56,7 +56,7 @@ def a_include_b(a_bbox, b_bbox):
     return include_or_not
 
 
-class SSD_two_stage_end2end(nn.Module):
+class SSD_two_stage_end2end_BB(nn.Module):
     """Single Shot Multibox Architecture
     The network is composed of a base VGG network followed by the
     added multibox conv layers.  Each multibox layer branches into
@@ -75,7 +75,7 @@ class SSD_two_stage_end2end(nn.Module):
     """
 
     def __init__(self, phase, size, size_2, base, extras, head, base_2, head_2, num_classes, expand_num):
-        super(SSD_two_stage_end2end, self).__init__()
+        super(SSD_two_stage_end2end_BB, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = two_stage_end2end
@@ -112,11 +112,10 @@ class SSD_two_stage_end2end(nn.Module):
 
         self.loc_2 = nn.ModuleList(head_2[0])
         self.conf_2 = nn.ModuleList(head_2[1])
-        self.four_corners_2 = nn.ModuleList(head_2[2])
 
         if phase == 'test':
             self.softmax_2 = nn.Softmax(dim=-1)
-            self.detect_2 = Detect_four_corners(num_classes, 0, 200, 0.01, 0.45)
+            self.detect_2 = Detect(num_classes, 0, 200, 0.01, 0.45)
 
     def forward(self, x, targets):
         """Applies network layers and ops on input image(s) x.
@@ -149,7 +148,6 @@ class SSD_two_stage_end2end(nn.Module):
         sources_2 = list()
         loc_2 = list()
         conf_2 = list()
-        four_corners_2 = list()
 
         # apply vgg up to conv1_1 relu
         # TODO: may be conv1_1 features
@@ -214,7 +212,7 @@ class SSD_two_stage_end2end(nn.Module):
         crop_width = self.size_2
         is_cuda = torch.cuda.is_available()
         detect_time = _t['im_detect'].toc(average=False)
-        print("vehicle post processing detect_time: " + str(detect_time))
+        # print("vehicle post processing detect_time: " + str(detect_time))
 
         _t['im_detect'].tic()
         if self.phase == 'train':
@@ -335,14 +333,12 @@ class SSD_two_stage_end2end(nn.Module):
                 sources_2.append(x_2)
 
                 # apply multibox head to source layers
-                for (x_2, l_2, c_2, f_2) in zip(sources_2, self.loc_2, self.conf_2, self.four_corners_2):
+                for (x_2, l_2, c_2) in zip(sources_2, self.loc_2, self.conf_2):
                     loc_2.append(l_2(x_2).permute(0, 2, 3, 1).contiguous())
                     conf_2.append(c_2(x_2).permute(0, 2, 3, 1).contiguous())
-                    four_corners_2.append(f_2(x_2).permute(0, 2, 3, 1).contiguous())
 
                 loc_2 = torch.cat([o.view(o.size(0), -1) for o in loc_2], 1)
                 conf_2 = torch.cat([o.view(o.size(0), -1) for o in conf_2], 1)
-                four_corners_2 = torch.cat([o.view(o.size(0), -1) for o in four_corners_2], 1)
 
             # 如果loc_2还是list,说明gt_new是没有的,第二个网络的预测和GT都为空
             if isinstance(loc_2, list):
@@ -357,7 +353,6 @@ class SSD_two_stage_end2end(nn.Module):
                     torch.zeros(1, self.priors_2.shape[0], 4),
                     torch.zeros(1, self.priors_2.shape[0], 2),
                     self.priors_2,
-                    torch.zeros(1, self.priors_2.shape[0], 8),
                     torch.zeros(1, 14)  # 最后一位为0表示这个GT not valid
                 )
             else:
@@ -372,7 +367,6 @@ class SSD_two_stage_end2end(nn.Module):
                     loc_2.view(loc_2.size(0), -1, 4),
                     conf_2.view(conf_2.size(0), -1, self.num_classes),
                     self.priors_2,
-                    four_corners_2.view(four_corners_2.size(0), -1, 8),
                     gt_new
                 )
 
@@ -445,7 +439,7 @@ class SSD_two_stage_end2end(nn.Module):
             #     plt.imshow(crops_torch_data[m, :, :, 33])
             #     plt.show()
             detect_time = _t['im_detect'].toc(average=False)
-            print("roi warping detect_time: " + str(detect_time))
+            # print("roi warping detect_time: " + str(detect_time))
 
             _t['im_detect'].tic()
             # 第二个网络!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -464,27 +458,24 @@ class SSD_two_stage_end2end(nn.Module):
             sources_2.append(x_2)
 
             # apply multibox head to source layers
-            for (x_2, l_2, c_2, f_2) in zip(sources_2, self.loc_2, self.conf_2, self.four_corners_2):
+            for (x_2, l_2, c_2) in zip(sources_2, self.loc_2, self.conf_2):
                 loc_2.append(l_2(x_2).permute(0, 2, 3, 1).contiguous())
                 conf_2.append(c_2(x_2).permute(0, 2, 3, 1).contiguous())
-                four_corners_2.append(f_2(x_2).permute(0, 2, 3, 1).contiguous())
 
             loc_2 = torch.cat([o.view(o.size(0), -1) for o in loc_2], 1)
             conf_2 = torch.cat([o.view(o.size(0), -1) for o in conf_2], 1)
-            four_corners_2 = torch.cat([o.view(o.size(0), -1) for o in four_corners_2], 1)
             detect_time = _t['im_detect'].toc(average=False)
-            print("license plate detect_time: " + str(detect_time))
+            # print("license plate detect_time: " + str(detect_time))
 
             _t['im_detect'].tic()
             output_2 = self.detect_2(
                 loc_2.view(loc_2.size(0), -1, 4),
                 self.softmax_2(conf_2.view(conf_2.size(0), -1,
                                             self.num_classes)),
-                self.priors_2.cuda(),
-                four_corners_2.view(four_corners_2.size(0), -1, 8)
+                self.priors_2.cuda()
             )
             detect_time = _t['im_detect'].toc(average=False)
-            print("license plate post processing detect_time: " + str(detect_time))
+            # print("license plate post processing detect_time: " + str(detect_time))
             
             # 这种方法是综合所有车里面的车牌检测结果,然后只选取所有结果的前200个
             # (num_car, 200, 13)
@@ -624,7 +615,6 @@ def multibox(vgg, extra_layers, cfg, num_classes, vgg_2, cfg_2):
 
     loc_layers_2 = []
     conf_layers_2 = []
-    four_corners_layers_2 = []
     vgg_source_2 = [2, 7, 12]
     for k, v in enumerate(vgg_source):
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
@@ -654,11 +644,9 @@ def multibox(vgg, extra_layers, cfg, num_classes, vgg_2, cfg_2):
                                  cfg_2[k] * 4, kernel_size=3, padding=1)]
         conf_layers_2 += [nn.Conv2d(vgg_2[v].out_channels,
                         cfg_2[k] * num_classes, kernel_size=3, padding=1)]
-        four_corners_layers_2 += [nn.Conv2d(vgg_2[v].out_channels,
-                                          cfg_2[k] * 8, kernel_size=3, padding=1)]
 
     return vgg, extra_layers, (loc_layers, conf_layers, has_lp_layers, size_lp_layers, offset_layers),\
-           vgg_2, (loc_layers_2, conf_layers_2, four_corners_layers_2)
+           vgg_2, (loc_layers_2, conf_layers_2)
 
 
 base = {
@@ -694,4 +682,4 @@ def build_ssd(phase, size=300, size_2=56, num_classes=21, expand_num=3):
                                                       vgg_2(base[str(size_2)], 64),
                                                       mbox[str(size_2)]
                                                       )
-    return SSD_two_stage_end2end(phase, size, size_2, base_, extras_, head_, base_2_, head_2_, num_classes, expand_num)
+    return SSD_two_stage_end2end_BB(phase, size, size_2, base_, extras_, head_, base_2_, head_2_, num_classes, expand_num)
